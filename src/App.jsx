@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, limit, orderBy, where } from 'firebase/firestore';
@@ -22,7 +22,7 @@ const db = getFirestore(app);
 
 // --- Helper Functions ---
 const getDisplayImageUrl = (url) => {
-  if (!url) return "";
+  if (!url || typeof url !== 'string') return ""; // ป้องกัน error ถ้าไม่ใช่ string
   if (url.startsWith('data:')) return url;
   try {
     if (url.includes('drive.google.com')) {
@@ -46,7 +46,10 @@ const getDisplayImageUrl = (url) => {
 
 const base64ToBlob = (base64, type = 'application/pdf') => {
   try {
-    const binStr = atob(base64.split(',')[1]);
+    if (!base64 || typeof base64 !== 'string') return null;
+    const parts = base64.split(',');
+    if (parts.length < 2) return null; // ป้องกัน format ผิด
+    const binStr = atob(parts[1]);
     const len = binStr.length;
     const arr = new Uint8Array(len);
     for (let i = 0; i < len; i++) {
@@ -73,7 +76,7 @@ const MediaDisplay = ({ src, alt, className, isPdf }) => {
     );
   }
 
-  if (isPdf || (src.startsWith('data:application/pdf'))) {
+  if (isPdf || (typeof src === 'string' && src.startsWith('data:application/pdf'))) {
     return (
       <div className={`bg-slate-100 relative flex flex-col items-center justify-center text-slate-500 border border-slate-200 ${className}`}>
         <FileIcon size={40} className="text-red-500 mb-2"/>
@@ -115,7 +118,7 @@ const FileUploader = ({ label, onFileSelect, previewUrl, initialUrl }) => {
     reader.readAsDataURL(file);
   };
 
-  const isPdf = previewUrl?.startsWith('data:application/pdf') || initialUrl?.includes('.pdf');
+  const isPdf = (typeof previewUrl === 'string' && previewUrl.startsWith('data:application/pdf')) || (typeof initialUrl === 'string' && initialUrl.includes('.pdf'));
 
   return (
     <div className="col-span-2">
@@ -217,7 +220,16 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
              <div className="col-span-2"><label className="block text-sm font-medium text-slate-700 mb-1">ชื่อยาสามัญ *</label><input name="genericName" value={formData.genericName} onChange={handleChange} className="w-full p-2 border rounded-lg" required /></div>
              <div className="col-span-2"><label className="block text-sm font-medium text-slate-700 mb-1">ชื่อยี่ห้อ</label><input name="brandName" value={formData.brandName} onChange={handleChange} className="w-full p-2 border rounded-lg" /></div>
              <div><label className="block text-sm font-medium text-slate-700 mb-1">รูปแบบ</label><input name="dosage" value={formData.dosage} onChange={handleChange} className="w-full p-2 border rounded-lg" /></div>
-             <div><label className="block text-sm font-medium text-slate-700 mb-1">ประเภท</label><select name="type" value={formData.type} onChange={handleChange} className="w-full p-2 border rounded-lg"><option value="injection">ยาฉีด</option><option value="oral">ยากิน</option><option value="sublingual">ยาอมใต้ลิ้น</option><option value="external">ยาใช้เฉพาะที่/ยาใช้ภายนอก</option></select></div>
+             <div>
+               <label className="block text-sm font-medium text-slate-700 mb-1">ประเภท</label>
+               <select name="type" value={formData.type} onChange={handleChange} className="w-full p-2 border rounded-lg">
+                 <option value="injection">ยาฉีด</option>
+                 <option value="oral">ยากิน</option>
+                 <option value="sublingual">ยาอมใต้ลิ้น</option>
+                 <option value="external">ยาใช้ภายนอก</option>
+                 <option value="topical">ยาเฉพาะที่</option>
+               </select>
+             </div>
              <div className="col-span-2"><label className="block text-sm font-medium text-slate-700 mb-1">บริษัทผู้ผลิต</label><input name="manufacturer" value={formData.manufacturer} onChange={handleChange} className="w-full p-2 border rounded-lg" /></div>
              
              <div className="col-span-2"><hr className="my-2"/></div>
@@ -273,6 +285,7 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
 const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const displayImage = getDisplayImageUrl(drug.image);
   const displayLeaflet = getDisplayImageUrl(drug.leaflet);
+  const isPdf = (url) => typeof url === 'string' && url.startsWith('data:application/pdf');
   
   const InfoItem = ({ icon, label, value }) => (<div><div className="flex items-center gap-1 text-slate-500 text-xs mb-1">{icon} {label}</div><div className="font-medium text-slate-800">{value || "-"}</div></div>);
   const Row = ({ label, value }) => (<div className="flex justify-between items-start text-sm"><span className="text-slate-500 min-w-[100px] shrink-0">{label}:</span><span className="text-slate-800 font-medium text-right flex-1 whitespace-pre-wrap">{value || "-"}</span></div>);
@@ -280,7 +293,7 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const handleOpenLeaflet = () => {
     if (!displayLeaflet) return;
     let urlToOpen = displayLeaflet;
-    if (displayLeaflet.startsWith('data:application/pdf')) {
+    if (typeof displayLeaflet === 'string' && displayLeaflet.startsWith('data:application/pdf')) {
       const blob = base64ToBlob(displayLeaflet);
       if (blob) urlToOpen = URL.createObjectURL(blob);
     }
@@ -297,7 +310,7 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
           </div>
         </div>
         <div className="p-0 overflow-y-auto custom-scrollbar bg-white">
-          <div className="w-full h-64 bg-slate-100 flex items-center justify-center relative"><MediaDisplay src={displayImage} alt={drug.genericName} className="w-full h-full object-contain" isPdf={false} /><div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">รูปผลิตภัณฑ์</div></div>
+          <div className="w-full h-64 bg-slate-100 flex items-center justify-center relative"><MediaDisplay src={displayImage} alt={drug.genericName} className="w-full h-full object-contain" isPdf={isPdf(displayImage)} /><div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">รูปผลิตภัณฑ์</div></div>
           <div className="p-6 space-y-6">
             <div className="grid grid-cols-2 gap-4"><InfoItem icon={<Building size={16}/>} label="ผู้ผลิต" value={drug.manufacturer} /><InfoItem icon={<Pill size={16}/>} label="รูปแบบ/ความแรง" value={drug.dosage} /></div>
             <hr className="border-slate-100" />
@@ -372,7 +385,7 @@ export default function App() {
           <div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อยา, ยี่ห้อ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all outline-none" /></div>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setVisibleCount(10); }} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="all">💊 แสดงทั้งหมด</option><option value="injection">💉 ยาฉีด (Injection)</option><option value="oral">💊 ยากิน (Oral)</option><option value="sublingual">👅 ยาอมใต้ลิ้น</option><option value="external">🧴 ยาใช้ภายนอก</option>
+              <option value="all">💊 แสดงทั้งหมดยา</option><option value="injection">💉 ยาฉีด (Injection)</option><option value="oral">💊 ยากิน (Oral)</option><option value="sublingual">👅 ยาอมใต้ลิ้น</option><option value="external">🧴 ยาใช้ภายนอก</option><option value="topical">🩹 ยาเฉพาะที่</option>
             </select>
           </div>
         </div>
