@@ -1,0 +1,99 @@
+/* 1. ดึงโครงสร้าง Tailwind มาใช้ (Layout) */
+@import url('https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css');
+
+/* 2. สร้างสีใหม่ให้เหมือนต้นฉบับ (เพราะ CDN v2 ไม่มีสี Slate/Rose) */
+:root {
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-800: #1e293b;
+  --rose-50: #fff1f2;
+  --rose-100: #ffe4e6;
+  --rose-500: #f43f5e;
+  --rose-600: #e11d48;
+}
+
+/* 3. บังคับใช้สี */
+body {
+  background-color: var(--slate-50);
+  font-family: sans-serif;
+}
+.bg-slate-50 {
+  background-color: var(--slate-50);
+}
+.bg-slate-100 {
+  background-color: var(--slate-100);
+}
+.bg-slate-800 {
+  background-color: var(--slate-800);
+}
+.text-slate-400 {
+  color: var(--slate-400);
+}
+.text-slate-500 {
+  color: var(--slate-500);
+}
+.text-slate-800 {
+  color: var(--slate-800);
+}
+.border-slate-100 {
+  border-color: var(--slate-100);
+}
+.border-slate-200 {
+  border-color: var(--slate-200);
+}
+
+/* สีพิเศษสำหรับยาฉีด */
+.bg-rose-50 {
+  background-color: var(--rose-50);
+}
+.bg-rose-100 {
+  background-color: var(--rose-100);
+}
+.text-rose-500 {
+  color: var(--rose-500);
+}
+.text-rose-600 {
+  color: var(--rose-600);
+}
+.border-rose-100 {
+  border-color: var(--rose-100);
+}
+/* 1. บังคับความสูง Modal ให้ไม่ทะลุจอ (สำคัญมาก!) */
+.max-h-\[90vh\] {
+  max-height: 90vh;
+}
+
+/* 2. สั่งให้แสดงปุ่ม Scroll ถ้าเนื้อหายาวเกิน */
+.overflow-y-auto {
+  overflow-y: auto;
+}
+
+/* 3. แก้ลำดับชั้น (Z-Index) ให้หน้าต่างลอยทับถูกต้อง */
+.z-\[60\] {
+  z-index: 60;
+}
+.z-\[70\] {
+  z-index: 70;
+}
+.z-\[80\] {
+  z-index: 80;
+}
+
+/* 4. (แถม) ตกแต่ง Scrollbar ให้สวยงาม */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
