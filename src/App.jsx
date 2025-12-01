@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-// เพิ่ม limit, orderBy, where เข้ามาสำหรับระบบโหลดและค้นหา
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, limit, orderBy, where } from 'firebase/firestore';
 
 // --- Firebase Configuration ---
@@ -45,7 +44,6 @@ const getDisplayImageUrl = (url) => {
   return url;
 };
 
-// ฟังก์ชันแปลง Base64 เป็น Blob
 const base64ToBlob = (base64, type = 'application/pdf') => {
   try {
     const binStr = atob(base64.split(',')[1]);
@@ -56,7 +54,7 @@ const base64ToBlob = (base64, type = 'application/pdf') => {
     }
     return new Blob([arr], { type: type });
   } catch (e) {
-    console.error("Blob conversion error", e);
+    console.error("Blob error", e);
     return null;
   }
 };
@@ -199,7 +197,6 @@ const DrugCard = ({ drug, onClick }) => (
   </div>
 );
 
-// --- DrugFormModal (เวอร์ชันมีช่องหมายเหตุ + ยานอกบัญชี) ---
 const DrugFormModal = ({ initialData, onClose, onSave }) => {
   const [formData, setFormData] = useState(initialData || {
     genericName: "", brandName: "", manufacturer: "", dosage: "",
@@ -273,71 +270,41 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
   );
 };
 
-// --- DetailModal (เวอร์ชันเปิด New Tab 100%) ---
 const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const displayImage = getDisplayImageUrl(drug.image);
   const displayLeaflet = getDisplayImageUrl(drug.leaflet);
-  const isPdf = (url) => url?.startsWith('data:application/pdf');
   
   const InfoItem = ({ icon, label, value }) => (<div><div className="flex items-center gap-1 text-slate-500 text-xs mb-1">{icon} {label}</div><div className="font-medium text-slate-800">{value || "-"}</div></div>);
   const Row = ({ label, value }) => (<div className="flex justify-between items-start text-sm"><span className="text-slate-500 min-w-[100px] shrink-0">{label}:</span><span className="text-slate-800 font-medium text-right flex-1 whitespace-pre-wrap">{value || "-"}</span></div>);
 
-  // ฟังก์ชันเปิด PDF
   const handleOpenLeaflet = () => {
     if (!displayLeaflet) return;
-
     let urlToOpen = displayLeaflet;
-    
     if (displayLeaflet.startsWith('data:application/pdf')) {
       const blob = base64ToBlob(displayLeaflet);
-      if (blob) {
-        urlToOpen = URL.createObjectURL(blob);
-      }
+      if (blob) urlToOpen = URL.createObjectURL(blob);
     }
-
-    // สั่งเปิด Tab ใหม่ทันที
     window.open(urlToOpen, '_blank');
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        
-        {/* Header */}
         <div className="bg-slate-800 text-white p-4 flex justify-between items-center sticky top-0 z-10">
           <div className="overflow-hidden"><h2 className="text-xl font-bold truncate pr-2">{drug.genericName}</h2><p className="text-slate-300 text-sm truncate">{drug.brandName}</p></div>
           <div className="flex items-center gap-2 shrink-0">
             {isAdmin && (<><button onClick={onEdit} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors text-yellow-400" title="แก้ไข"><Edit size={18} /></button><button onClick={() => onDelete(drug.id)} className="p-2 bg-slate-700 hover:bg-red-600 rounded-full transition-colors text-red-400 hover:text-white" title="ลบ"><Trash2 size={18} /></button></>)}<button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button>
           </div>
         </div>
-
-        {/* Content */}
         <div className="p-0 overflow-y-auto custom-scrollbar bg-white">
-          <div className="w-full h-64 bg-slate-100 flex items-center justify-center relative"><MediaDisplay src={displayImage} alt={drug.genericName} className="w-full h-full object-contain" isPdf={isPdf(displayImage)} /><div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">รูปผลิตภัณฑ์</div></div>
+          <div className="w-full h-64 bg-slate-100 flex items-center justify-center relative"><MediaDisplay src={displayImage} alt={drug.genericName} className="w-full h-full object-contain" isPdf={false} /><div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">รูปผลิตภัณฑ์</div></div>
           <div className="p-6 space-y-6">
             <div className="grid grid-cols-2 gap-4"><InfoItem icon={<Building size={16}/>} label="ผู้ผลิต" value={drug.manufacturer} /><InfoItem icon={<Pill size={16}/>} label="รูปแบบ/ความแรง" value={drug.dosage} /></div>
             <hr className="border-slate-100" />
             <div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Shield size={18} className="text-emerald-500" /> การสั่งใช้และกฎหมาย</h3><div className="bg-slate-50 p-4 rounded-lg space-y-3"><Row label="ประเภทบัญชียา" value={drug.category} /><Row label="แพทย์ผู้สามารถสั่งใช้" value={drug.prescriber} /><Row label="สามารถสั่งใช้ได้ใน" value={drug.usageType} /></div></div>
             {drug.type === 'injection' && (<div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Thermometer size={18} className="text-rose-500" /> การผสมและการเก็บรักษา</h3><div className="bg-rose-50 p-4 rounded-lg space-y-3 border border-rose-100"><Row label="สารละลายที่ใช้" value={drug.diluent} /><Row label="ความคงตัว" value={drug.stability} /><Row label="วิธีการบริหาร" value={drug.administration} /></div></div>)}
-            
-            {/* ส่วนแสดงหมายเหตุ (Note) */}
-            {drug.note && (
-              <div className="bg-orange-50 border border-orange-100 p-4 rounded-lg">
-                <h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2 text-sm">
-                  <Info size={16} /> หมายเหตุเพิ่มเติม
-                </h3>
-                <p className="text-slate-700 text-sm whitespace-pre-wrap">{drug.note}</p>
-              </div>
-            )}
-
-            {drug.leaflet && (
-              <button 
-                onClick={handleOpenLeaflet} 
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"
-              >
-                <FileText size={20} /> ดูเอกสารกำกับยา (PDF)
-              </button>
-            )}
+            {drug.note && (<div className="bg-orange-50 border border-orange-100 p-4 rounded-lg"><h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2 text-sm"><Info size={16} /> หมายเหตุเพิ่มเติม</h3><p className="text-slate-700 text-sm whitespace-pre-wrap">{drug.note}</p></div>)}
+            {drug.leaflet && (<button onClick={handleOpenLeaflet} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"><FileText size={20} /> ดูเอกสารกำกับยา (PDF)</button>)}
           </div>
         </div>
       </div>
@@ -351,8 +318,9 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [drugs, setDrugs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [visibleCount, setVisibleCount] = useState(10); // ตัวนับจำนวนที่จะแสดง
+  const [visibleCount, setVisibleCount] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterType, setFilterType] = useState("all");
   const [drugToDelete, setDrugToDelete] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false); 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); 
@@ -363,50 +331,36 @@ export default function App() {
 
   useEffect(() => { const initAuth = async () => { try { await signInAnonymously(auth); } catch (error) { console.error("Auth error:", error); } }; initAuth(); const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => setUser(currentUser)); return () => unsubscribeAuth(); }, []);
   
-  // --- useEffect สำหรับดึงข้อมูล (ระบบโหลดเพิ่ม + ค้นหาขั้นสูง) ---
   useEffect(() => {
     if (!user) return;
-
-    let q;
     const drugsRef = collection(db, 'drugs');
-
-    if (searchTerm.trim() === "") {
-      // 1. กรณีไม่ได้ค้นหา: ดึงมาตามจำนวน visibleCount
-      q = query(drugsRef, orderBy('genericName'), limit(visibleCount)); 
-    } else {
-      // 2. กรณีค้นหา: แปลงตัวแรกเป็นตัวใหญ่ แล้วค้นหาผ่าน Server
+    let constraints = [];
+    if (filterType !== 'all') { constraints.push(where('type', '==', filterType)); }
+    if (searchTerm.trim() !== "") {
       const searchKey = searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1);
-      
-      q = query(
-        drugsRef, 
-        where('genericName', '>=', searchKey),
-        where('genericName', '<=', searchKey + '\uf8ff'),
-        limit(visibleCount)
-      );
-    }
-
+      constraints.push(where('genericName', '>=', searchKey));
+      constraints.push(where('genericName', '<=', searchKey + '\uf8ff'));
+    } else { constraints.push(orderBy('genericName')); }
+    constraints.push(limit(visibleCount));
+    const q = query(drugsRef, ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const drugList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setDrugs(drugList);
       setLoading(false);
       setPermissionError(false);
     }, (error) => { 
-      console.error("Firestore error:", error); 
-      setLoading(false); 
+      console.error("Firestore error:", error); setLoading(false); 
+      if (error.code === 'failed-precondition') { alert("ระบบต้องการ Index เพิ่มเติม (ดู Console)"); }
       if (error.code === 'permission-denied') setPermissionError(true);
     });
-
     return () => unsubscribe();
-  }, [user, searchTerm, visibleCount]);
+  }, [user, searchTerm, visibleCount, filterType]);
 
   const handleAdminToggle = () => { if (isAdmin) { setIsAdmin(false); } else { setIsLoginModalOpen(true); } };
-  const handleSaveDrug = async (drugData) => { try { const collRef = collection(db, 'drugs'); if (drugData.id) { const docRef = doc(db, 'drugs', drugData.id); const { id, ...dataToUpdate } = drugData; await updateDoc(docRef, dataToUpdate); } else { await addDoc(collRef, drugData); } setIsFormOpen(false); setSelectedDrug(null); setIsEditing(false); } catch (error) { console.error("Error saving drug:", error); alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล (ขนาดรูปอาจใหญ่เกิน 1MB หรือไม่มีสิทธิ์เข้าถึง)"); } };
+  const handleSaveDrug = async (drugData) => { try { const collRef = collection(db, 'drugs'); if (drugData.id) { const docRef = doc(db, 'drugs', drugData.id); const { id, ...dataToUpdate } = drugData; await updateDoc(docRef, dataToUpdate); } else { await addDoc(collRef, drugData); } setIsFormOpen(false); setSelectedDrug(null); setIsEditing(false); } catch (error) { console.error("Error saving drug:", error); alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล"); } };
   const requestDeleteDrug = (id) => { setDrugToDelete(id); };
   const confirmDeleteDrug = async () => { if (!drugToDelete) return; try { await deleteDoc(doc(db, 'drugs', drugToDelete)); setSelectedDrug(null); setIsFormOpen(false); setDrugToDelete(null); } catch (error) { console.error("Error deleting drug:", error); alert("ลบข้อมูลไม่สำเร็จ"); } };
   const handleAddSeedData = async () => { try { const collRef = collection(db, 'drugs'); await addDoc(collRef, INITIAL_DATA[0]); } catch(e) { console.error(e) } };
-  
-  // กรองข้อมูลซ้ำอีกรอบฝั่ง Client (เผื่อกรณีค้นหาแล้วตัวเล็กตัวใหญ่ไม่ตรงเป๊ะ)
-  const filteredDrugs = drugs.filter(drug => (drug.genericName?.toLowerCase() || "").includes(searchTerm.toLowerCase()) || (drug.brandName?.toLowerCase() || "").includes(searchTerm.toLowerCase()));
   
   const consoleUrl = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/rules`;
 
@@ -415,34 +369,19 @@ export default function App() {
       <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-10">
         <div className="max-w-md mx-auto">
           <div className="flex justify-between items-center mb-4"><h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><div className="bg-blue-600 text-white p-2 rounded-lg"><Pill size={20} /></div> Yommarat Drug List</h1><button onClick={handleAdminToggle} className={`p-2 rounded-full transition-colors ${isAdmin ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`} title={isAdmin ? "ออกจากโหมดผู้ดูแล" : "เข้าสู่โหมดผู้ดูแล"}>{isAdmin ? <Unlock size={20}/> : <Lock size={20}/>}</button></div>
-          <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อยา, ยี่ห้อ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all outline-none" /></div>
+          <div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อยา, ยี่ห้อ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all outline-none" /></div>
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setVisibleCount(10); }} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="all">💊 แสดงทั้งหมดยา</option><option value="injection">💉 ยาฉีด (Injection)</option><option value="oral">💊 ยากิน (Oral)</option><option value="sublingual">👅 ยาอมใต้ลิ้น</option><option value="external">🧴 ยาใช้ภายนอก</option>
+            </select>
+          </div>
         </div>
       </header>
       <main className="max-w-md mx-auto p-4 pb-20">
         {permissionError && (<div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded shadow-sm flex items-start gap-3"><AlertTriangle size={24} className="shrink-0" /><div><p className="font-bold">ไม่สามารถเข้าถึงข้อมูลได้</p><p className="text-sm">กรุณาตั้งค่า <strong>Firestore Rules</strong> ใน Firebase Console ให้เป็น <code>allow read, write: if true;</code></p><a href={consoleUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:underline mt-2 text-sm font-semibold">ไปที่หน้าตั้งค่า <ExternalLink size={14}/></a></div></div>)}
-        
-        {loading ? (
-           <div className="text-center mt-10 text-slate-500 animate-pulse">กำลังโหลดข้อมูล...</div>
-        ) : filteredDrugs.length > 0 ? (
-           <>
-             {filteredDrugs.map(drug => (<DrugCard key={drug.id} drug={drug} onClick={setSelectedDrug} />))}
-             
-             {/* ปุ่มโหลดเพิ่มเติม */}
-             <div className="mt-6 text-center pb-8">
-                <button 
-                  onClick={() => setVisibleCount(prev => prev + 20)}
-                  className="bg-slate-200 text-slate-600 px-6 py-2 rounded-full hover:bg-slate-300 transition-colors text-sm font-bold shadow-sm"
-                >
-                  โหลดเพิ่มเติม...
-                </button>
-             </div>
-           </>
-        ) : (
-           <div className="text-center text-slate-400 mt-10 flex flex-col items-center gap-3">
-             <Pill size={48} className="opacity-20" /><p>ไม่พบข้อมูลยา</p>
-             {drugs.length === 0 && isAdmin && (<button onClick={handleAddSeedData} className="text-blue-500 text-sm hover:underline">+ เพิ่มข้อมูลตัวอย่าง</button>)}
-           </div>
-        )}
+        {loading ? (<div className="text-center mt-10 text-slate-500 animate-pulse">กำลังโหลดข้อมูล...</div>) : drugs.length > 0 ? (
+           <>{drugs.map(drug => (<DrugCard key={drug.id} drug={drug} onClick={setSelectedDrug} />))}<div className="mt-6 text-center pb-8"><button onClick={() => setVisibleCount(prev => prev + 10)} className="bg-slate-200 text-slate-600 px-6 py-2 rounded-full hover:bg-slate-300 transition-colors text-sm font-bold shadow-sm">โหลดเพิ่มเติม...</button></div></>
+        ) : (<div className="text-center text-slate-400 mt-10 flex flex-col items-center gap-3"><Pill size={48} className="opacity-20" /><p>ไม่พบข้อมูลยา</p>{drugs.length === 0 && isAdmin && (<button onClick={handleAddSeedData} className="text-blue-500 text-sm hover:underline">+ เพิ่มข้อมูลตัวอย่าง</button>)}</div>)}
       </main>
       {isAdmin && (<div className="fixed bottom-6 right-6 z-40"><button onClick={() => { setIsEditing(false); setIsFormOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"><Plus size={24} /> <span className="font-bold hidden md:inline">เพิ่มยา</span></button></div>)}
       {selectedDrug && !isEditing && (<DetailModal drug={selectedDrug} onClose={() => setSelectedDrug(null)} onEdit={() => { setIsEditing(true); setIsFormOpen(true); }} onDelete={requestDeleteDrug} isAdmin={isAdmin} />)}
