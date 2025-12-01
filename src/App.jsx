@@ -351,7 +351,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [drugs, setDrugs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [visibleCount, setVisibleCount] = useState(20); // ตัวนับจำนวนที่จะแสดง
+  const [visibleCount, setVisibleCount] = useState(10); // ตัวนับจำนวนที่จะแสดง
   const [searchTerm, setSearchTerm] = useState("");
   const [drugToDelete, setDrugToDelete] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false); 
