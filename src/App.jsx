@@ -296,7 +296,7 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
            <div className="grid grid-cols-2 gap-4">
              <div className="col-span-2"><label className="block text-sm font-medium text-slate-700 mb-1">ชื่อยาสามัญ *</label><input name="genericName" value={formData.genericName} onChange={handleChange} className="w-full p-2 border rounded-lg" required /></div>
              <div className="col-span-2"><label className="block text-sm font-medium text-slate-700 mb-1">ชื่อยี่ห้อ</label><input name="brandName" value={formData.brandName} onChange={handleChange} className="w-full p-2 border rounded-lg" /></div>
-             <div><label className="block text-sm font-medium text-slate-700 mb-1">รูปแบบ</label><input name="dosage" value={formData.dosage} onChange={handleChange} className="w-full p-2 border rounded-lg" /></div>
+             <div><label className="block text-sm font-medium text-slate-700 mb-1">รูปแบบ/ความแรง</label><input name="dosage" value={formData.dosage} onChange={handleChange} className="w-full p-2 border rounded-lg" /></div>
              <div>
                <label className="block text-sm font-medium text-slate-700 mb-1">ประเภท</label>
                <select name="type" value={formData.type} onChange={handleChange} className="w-full p-2 border rounded-lg">
