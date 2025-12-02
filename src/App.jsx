@@ -449,25 +449,46 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const drugsRef = collection(db, 'drugs');
-    let constraints = [];
-    if (filterType !== 'all') { constraints.push(where('type', '==', filterType)); }
-    if (searchTerm.trim() !== "") {
-      const searchKey = searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1);
-      constraints.push(where('genericName', '>=', searchKey));
-      constraints.push(where('genericName', '<=', searchKey + '\uf8ff'));
-    } else { constraints.push(orderBy('genericName')); }
-    constraints.push(limit(visibleCount));
-    const q = query(drugsRef, ...constraints);
+    
+    // 1. ดึงข้อมูลทั้งหมดมาก่อน (เรียงตามชื่อ) 
+    // (เอา limit ออก เพื่อให้เราค้นหาข้อมูลทั้งหมดที่มีได้)
+    const q = query(drugsRef, orderBy('genericName'));
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const drugList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setDrugs(drugList);
+      // แปลงข้อมูลทั้งหมดเป็นรายการ
+      let allDrugs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // 2. กรองข้อมูลด้วย JavaScript (ค้นหาทั้ง Generic และ Brand)
+      if (searchTerm.trim() !== "") {
+        const lowerTerm = searchTerm.toLowerCase(); // แปลงคำค้นเป็นตัวพิมพ์เล็ก
+        
+        allDrugs = allDrugs.filter(drug => {
+          const generic = drug.genericName ? drug.genericName.toLowerCase() : "";
+          const brand = drug.brandName ? drug.brandName.toLowerCase() : "";
+          
+          // ค้นหาว่ามีคำนี้อยู่ใน ชื่อสามัญ หรือ ชื่อยี่ห้อ หรือไม่
+          return generic.includes(lowerTerm) || brand.includes(lowerTerm);
+        });
+      }
+
+      // 3. กรองประเภท (Filter Type)
+      if (filterType !== 'all') {
+        allDrugs = allDrugs.filter(drug => drug.type === filterType);
+      }
+
+      // 4. ตัดข้อมูลเพื่อแสดงผล (Pagination)
+      // แสดงผลตามจำนวน visibleCount ที่กำหนด
+      const visibleList = allDrugs.slice(0, visibleCount);
+      
+      setDrugs(visibleList);
       setLoading(false);
       setPermissionError(false);
     }, (error) => { 
-      console.error("Firestore error:", error); setLoading(false); 
-      if (error.code === 'failed-precondition') { alert("ระบบต้องการ Index เพิ่มเติม (ดู Console)"); }
+      console.error("Firestore error:", error); 
+      setLoading(false); 
       if (error.code === 'permission-denied') setPermissionError(true);
     });
+    
     return () => unsubscribe();
   }, [user, searchTerm, visibleCount, filterType]);
 
