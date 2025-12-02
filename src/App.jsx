@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, limit, orderBy, where } from 'firebase/firestore';
@@ -22,7 +22,7 @@ const db = getFirestore(app);
 
 // --- Helper Functions ---
 const getDisplayImageUrl = (url) => {
-  if (!url || typeof url !== 'string') return ""; // ป้องกัน error ถ้าไม่ใช่ string
+  if (!url) return "";
   if (url.startsWith('data:')) return url;
   try {
     if (url.includes('drive.google.com')) {
@@ -46,10 +46,7 @@ const getDisplayImageUrl = (url) => {
 
 const base64ToBlob = (base64, type = 'application/pdf') => {
   try {
-    if (!base64 || typeof base64 !== 'string') return null;
-    const parts = base64.split(',');
-    if (parts.length < 2) return null; // ป้องกัน format ผิด
-    const binStr = atob(parts[1]);
+    const binStr = atob(base64.split(',')[1]);
     const len = binStr.length;
     const arr = new Uint8Array(len);
     for (let i = 0; i < len; i++) {
@@ -76,7 +73,7 @@ const MediaDisplay = ({ src, alt, className, isPdf }) => {
     );
   }
 
-  if (isPdf || (typeof src === 'string' && src.startsWith('data:application/pdf'))) {
+  if (isPdf || (src.startsWith('data:application/pdf'))) {
     return (
       <div className={`bg-slate-100 relative flex flex-col items-center justify-center text-slate-500 border border-slate-200 ${className}`}>
         <FileIcon size={40} className="text-red-500 mb-2"/>
@@ -94,6 +91,75 @@ const MediaDisplay = ({ src, alt, className, isPdf }) => {
     );
   }
   return <img src={src} alt={alt} className={className} onError={() => setHasError(true)} referrerPolicy="no-referrer" />;
+};
+
+// ตัวเลือกสำหรับ MultiSelect Dropdown
+const MultiSelect = ({ label, options, value = [], onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleOption = (option) => {
+    const newValue = value.includes(option)
+      ? value.filter(v => v !== option)
+      : [...value, option];
+    onChange(newValue);
+  };
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full p-2 border rounded-lg bg-white flex justify-between items-center cursor-pointer min-h-[42px]"
+      >
+        <span className={`text-sm ${value.length === 0 ? 'text-gray-400' : 'text-slate-700'} truncate`}>
+          {value.length === 0 ? "เลือกสิทธิ..." : `เลือกแล้ว ${value.length} รายการ`}
+        </span>
+        <ChevronRight size={16} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`}/>
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-20 w-full bg-white border rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto p-1">
+          {options.map((option) => (
+            <div
+              key={option}
+              onClick={() => toggleOption(option)}
+              className="flex items-center gap-2 p-2 hover:bg-blue-50 rounded cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={value.includes(option)}
+                onChange={() => {}}
+                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-slate-700">{option}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* แสดงรายการที่เลือกเป็น Tags */}
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {value.map(v => (
+            <span key={v} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-md flex items-center gap-1">
+              {v} <button onClick={() => toggleOption(v)} className="hover:text-blue-600"><X size={12}/></button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const FileUploader = ({ label, onFileSelect, previewUrl, initialUrl }) => {
@@ -118,7 +184,7 @@ const FileUploader = ({ label, onFileSelect, previewUrl, initialUrl }) => {
     reader.readAsDataURL(file);
   };
 
-  const isPdf = (typeof previewUrl === 'string' && previewUrl.startsWith('data:application/pdf')) || (typeof initialUrl === 'string' && initialUrl.includes('.pdf'));
+  const isPdf = previewUrl?.startsWith('data:application/pdf') || initialUrl?.includes('.pdf');
 
   return (
     <div className="col-span-2">
@@ -205,9 +271,17 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
     genericName: "", brandName: "", manufacturer: "", dosage: "",
     category: "ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]", 
     prescriber: "", usageType: "", administration: "", 
-    diluent: "", stability: "", note: "", 
+    diluent: "", stability: "", note: "", reimbursement: [], 
     image: "", leaflet: "", type: "injection"
   });
+
+  const reimbursementOptions = [
+    "โครงการสวัสดิการ ขรก.",
+    "ประกันสังคม",
+    "บัตรทอง",
+    "โครงการสวัสดิการ อปท.",
+    "ทุกสิทธิการรักษา"
+  ];
 
   const handleChange = (e) => { const { name, value } = e.target; setFormData(prev => ({ ...prev, [name]: value })); };
 
@@ -234,6 +308,16 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
              
              <div className="col-span-2"><hr className="my-2"/></div>
              
+             {/* ส่วนสิทธิการเบิกจ่าย (MultiSelect) */}
+             <div className="col-span-2">
+               <MultiSelect 
+                 label="สิทธิการเบิกจ่าย" 
+                 options={reimbursementOptions} 
+                 value={formData.reimbursement || []} 
+                 onChange={(newVal) => setFormData(prev => ({...prev, reimbursement: newVal}))} 
+               />
+             </div>
+
              <div className="col-span-2"><label className="block text-sm font-medium text-slate-700 mb-1">ประเภทบัญชียา</label><select name="category" value={formData.category} onChange={handleChange} className="w-full p-2 border rounded-lg">
                  <option>ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]</option>
                  <option>ยาทางเลือก (supplemental list) [บัญชี ค เดิม]</option>
@@ -285,7 +369,6 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
 const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const displayImage = getDisplayImageUrl(drug.image);
   const displayLeaflet = getDisplayImageUrl(drug.leaflet);
-  const isPdf = (url) => typeof url === 'string' && url.startsWith('data:application/pdf');
   
   const InfoItem = ({ icon, label, value }) => (<div><div className="flex items-center gap-1 text-slate-500 text-xs mb-1">{icon} {label}</div><div className="font-medium text-slate-800">{value || "-"}</div></div>);
   const Row = ({ label, value }) => (<div className="flex justify-between items-start text-sm"><span className="text-slate-500 min-w-[100px] shrink-0">{label}:</span><span className="text-slate-800 font-medium text-right flex-1 whitespace-pre-wrap">{value || "-"}</span></div>);
@@ -293,7 +376,7 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const handleOpenLeaflet = () => {
     if (!displayLeaflet) return;
     let urlToOpen = displayLeaflet;
-    if (typeof displayLeaflet === 'string' && displayLeaflet.startsWith('data:application/pdf')) {
+    if (displayLeaflet.startsWith('data:application/pdf')) {
       const blob = base64ToBlob(displayLeaflet);
       if (blob) urlToOpen = URL.createObjectURL(blob);
     }
@@ -310,11 +393,27 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
           </div>
         </div>
         <div className="p-0 overflow-y-auto custom-scrollbar bg-white">
-          <div className="w-full h-64 bg-slate-100 flex items-center justify-center relative"><MediaDisplay src={displayImage} alt={drug.genericName} className="w-full h-full object-contain" isPdf={isPdf(displayImage)} /><div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">รูปผลิตภัณฑ์</div></div>
+          <div className="w-full h-64 bg-slate-100 flex items-center justify-center relative"><MediaDisplay src={displayImage} alt={drug.genericName} className="w-full h-full object-contain" isPdf={false} /><div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">รูปผลิตภัณฑ์</div></div>
           <div className="p-6 space-y-6">
             <div className="grid grid-cols-2 gap-4"><InfoItem icon={<Building size={16}/>} label="ผู้ผลิต" value={drug.manufacturer} /><InfoItem icon={<Pill size={16}/>} label="รูปแบบ/ความแรง" value={drug.dosage} /></div>
             <hr className="border-slate-100" />
-            <div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Shield size={18} className="text-emerald-500" /> การสั่งใช้และกฎหมาย</h3><div className="bg-slate-50 p-4 rounded-lg space-y-3"><Row label="ประเภทบัญชียา" value={drug.category} /><Row label="แพทย์ผู้สามารถสั่งใช้" value={drug.prescriber} /><Row label="สามารถสั่งใช้ได้ใน" value={drug.usageType} /></div></div>
+            <div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Shield size={18} className="text-emerald-500" /> การสั่งใช้และกฎหมาย</h3><div className="bg-slate-50 p-4 rounded-lg space-y-3">
+              <Row label="ประเภทบัญชียา" value={drug.category} />
+              
+              {/* แสดงสิทธิการเบิกจ่าย */}
+              {drug.reimbursement && drug.reimbursement.length > 0 && (
+                <div className="flex justify-between items-start text-sm pt-2 border-t border-slate-100 mt-2">
+                  <span className="text-slate-500 min-w-[100px] shrink-0">สิทธิเบิกจ่าย:</span>
+                  <div className="flex flex-wrap gap-1 justify-end flex-1">
+                    {drug.reimbursement.map(r => (
+                      <span key={r} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-md">{r}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Row label="แพทย์ผู้สามารถสั่งใช้" value={drug.prescriber} /><Row label="สามารถสั่งใช้ได้ใน" value={drug.usageType} />
+            </div></div>
             {drug.type === 'injection' && (<div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Thermometer size={18} className="text-rose-500" /> การผสมและการเก็บรักษา</h3><div className="bg-rose-50 p-4 rounded-lg space-y-3 border border-rose-100"><Row label="สารละลายที่ใช้" value={drug.diluent} /><Row label="ความคงตัว" value={drug.stability} /><Row label="วิธีการบริหาร" value={drug.administration} /></div></div>)}
             {drug.note && (<div className="bg-orange-50 border border-orange-100 p-4 rounded-lg"><h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2 text-sm"><Info size={16} /> หมายเหตุเพิ่มเติม</h3><p className="text-slate-700 text-sm whitespace-pre-wrap">{drug.note}</p></div>)}
             {drug.leaflet && (<button onClick={handleOpenLeaflet} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"><FileText size={20} /> ดูเอกสารกำกับยา (PDF)</button>)}
@@ -385,7 +484,7 @@ export default function App() {
           <div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อยา, ยี่ห้อ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all outline-none" /></div>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setVisibleCount(10); }} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="all">💊 แสดงทั้งหมด</option><option value="injection">💉 ยาฉีด (Injection)</option><option value="oral">💊 ยากิน (Oral)</option><option value="sublingual">👅 ยาอมใต้ลิ้น</option><option value="external">🧴 ยาใช้ภายนอก</option><option value="topical">🩹 ยาเฉพาะที่</option>
+              <option value="all">💊 แสดงทั้งหมดยา</option><option value="injection">💉 ยาฉีด (Injection)</option><option value="oral">💊 ยากิน (Oral)</option><option value="sublingual">👅 ยาอมใต้ลิ้น</option><option value="external">🧴 ยาใช้ภายนอก</option><option value="topical">🩹 ยาเฉพาะที่</option>
             </select>
           </div>
         </div>
