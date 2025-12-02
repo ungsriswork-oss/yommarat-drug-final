@@ -10,37 +10,33 @@ const ExportButton = ({ db }) => {
 
     setLoading(true);
     try {
-      // 1. ดึงข้อมูลจากฐานข้อมูล
       const querySnapshot = await getDocs(collection(db, "drugs"));
       
-      // 2. จัดเตรียมข้อมูล (จุดสำคัญคือตรงนี้ครับ)
       const data = querySnapshot.docs.map(doc => {
         const item = doc.data();
         
         return {
-          id: doc.id,           // เอา ID มาด้วย
-          ...item,              // เอาข้อมูลอื่นๆ (ชื่อยา, ราคา, ฯลฯ) มาทั้งหมด
+          id: doc.id,
+          ...item,
           
-          // --- ✅ ส่วนที่ตัดข้อมูลไฟล์ใหญ่ออก ---
-          // ถ้ามีรูป ให้ใส่คำว่า "มีรูปภาพ" แทนโค้ดยาวๆ
+          // ✅ แก้ไข 1: แปลง "สิทธิการเบิกจ่าย" จาก List ให้เป็นข้อความ
+          reimbursement: Array.isArray(item.reimbursement) 
+            ? item.reimbursement.join(", ") // ถ้ามีหลายอัน ให้คั่นด้วยลูกน้ำ
+            : item.reimbursement || "",      // ถ้าไม่มี ให้ปล่อยว่าง
+
+          // ✅ แก้ไข 2: ตัดไฟล์รูปภาพ/PDF ออกเหมือนเดิม
           image: item.image ? "มีรูปภาพ" : "ไม่มีรูป", 
-          
-          // ถ้ามีเอกสาร PDF ให้ใส่คำว่า "มีเอกสาร" แทนโค้ดยาวๆ
           leaflet: item.leaflet ? "มีเอกสาร PDF" : "ไม่มีเอกสาร"
-          // ------------------------------------
         };
       });
 
-      // 3. สร้างไฟล์ Excel
       const worksheet = XLSX.utils.json_to_sheet(data);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "DrugData");
-      
-      // 4. สั่งดาวน์โหลด
       XLSX.writeFile(workbook, "DrugData_Yom.xlsx");
 
     } catch (error) {
-      console.error("Error exporting:", error);
+      console.error("Error:", error);
       alert("เกิดข้อผิดพลาด: " + error.message);
     } finally {
       setLoading(false);
@@ -52,7 +48,7 @@ const ExportButton = ({ db }) => {
       onClick={handleExport}
       disabled={loading}
       style={{
-        backgroundColor: '#198754', // สีเขียว Excel
+        backgroundColor: '#198754',
         color: 'white',
         padding: '6px 12px',
         border: 'none',
