@@ -3,8 +3,10 @@ import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, limit, orderBy, where } from 'firebase/firestore';
-import Form from './Form';
-// ✅ 1. เพิ่มบรรทัดนี้เพื่อนำปุ่ม Export เข้ามา
+
+// ✅ นำเข้าข้อมูลกลุ่มยาจากไฟล์ Form.jsx
+import { DRUG_GROUPS } from './Form';
+// ✅ นำเข้าปุ่ม Export
 import ExportButton from './ExportButton';
 
 // --- Firebase Configuration ---
@@ -96,7 +98,6 @@ const MediaDisplay = ({ src, alt, className, isPdf }) => {
   return <img src={src} alt={alt} className={className} onError={() => setHasError(true)} referrerPolicy="no-referrer" />;
 };
 
-// ตัวเลือกสำหรับ MultiSelect Dropdown
 const MultiSelect = ({ label, options, value = [], onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
@@ -151,7 +152,6 @@ const MultiSelect = ({ label, options, value = [], onChange }) => {
         </div>
       )}
       
-      {/* แสดงรายการที่เลือกเป็น Tags */}
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {value.map(v => (
@@ -269,25 +269,64 @@ const DrugCard = ({ drug, onClick }) => (
   </div>
 );
 
+// ✅ 3. ปรับปรุง DrugFormModal ให้มีช่องเลือกกลุ่มยาบัญชีหลัก
 const DrugFormModal = ({ initialData, onClose, onSave }) => {
-  const [formData, setFormData] = useState(initialData || {
-    genericName: "", brandName: "", manufacturer: "", dosage: "",
-    category: "ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]", 
-    prescriber: "", usageType: "", administration: "", 
-    diluent: "", stability: "", note: "", reimbursement: [], 
-    image: "", leaflet: "", type: "injection"
+  // สร้าง State สำหรับ Form Data (รวม nlemMain, nlemSub)
+  const [formData, setFormData] = useState({
+    genericName: initialData?.genericName || "",
+    brandName: initialData?.brandName || "",
+    manufacturer: initialData?.manufacturer || "",
+    dosage: initialData?.dosage || "",
+    category: initialData?.category || "ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]",
+    nlemMain: initialData?.nlemMain || "", // กลุ่มยาหลัก
+    nlemSub: initialData?.nlemSub || "",   // กลุ่มยาย่อย
+    prescriber: initialData?.prescriber || "",
+    usageType: initialData?.usageType || "",
+    administration: initialData?.administration || "",
+    diluent: initialData?.diluent || "",
+    stability: initialData?.stability || "",
+    note: initialData?.note || "",
+    reimbursement: initialData?.reimbursement || [],
+    image: initialData?.image || "",
+    leaflet: initialData?.leaflet || "",
+    type: initialData?.type || "injection",
+    id: initialData?.id || null
   });
 
+  // State เก็บตัวเลือกย่อย
+  const [availableSubGroups, setAvailableSubGroups] = useState([]);
+
+  // Effect: โหลดกลุ่มยาย่อยตอนเปิดฟอร์ม (ถ้ามีข้อมูลเดิม)
+  useEffect(() => {
+    if (formData.nlemMain) {
+      const groupData = DRUG_GROUPS.find(g => g.group === formData.nlemMain);
+      setAvailableSubGroups(groupData ? groupData.subgroups : []);
+    }
+  }, [formData.nlemMain]);
+
   const reimbursementOptions = [
-    "โครงการสวัสดิการ ขรก.",
-    "ประกันสังคม",
-    "บัตรทอง",
-    "ชำระเงินเอง",
-    "โครงการสวัสดิการ อปท.",
-    "ทุกสิทธิการรักษา"
+    "โครงการสวัสดิการ ขรก.", "ประกันสังคม", "บัตรทอง",
+    "ชำระเงินเอง", "โครงการสวัสดิการ อปท.", "ทุกสิทธิการรักษา"
   ];
 
-  const handleChange = (e) => { const { name, value } = e.target; setFormData(prev => ({ ...prev, [name]: value })); };
+  const handleChange = (e) => { 
+    const { name, value } = e.target; 
+    setFormData(prev => ({ ...prev, [name]: value })); 
+  };
+
+  // ฟังก์ชันเลือกกลุ่มยาหลัก
+  const handleMainGroupChange = (e) => {
+    const val = e.target.value;
+    const groupData = DRUG_GROUPS.find(g => g.group === val);
+    setAvailableSubGroups(groupData ? groupData.subgroups : []);
+    
+    // รีเซ็ตตัวเลือกย่อยเมื่อเปลี่ยนตัวหลัก
+    setFormData(prev => ({
+      ...prev,
+      nlemMain: val,
+      nlemSub: "" 
+    }));
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
@@ -312,14 +351,8 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
              
              <div className="col-span-2"><hr className="my-2"/></div>
              
-             {/* ส่วนสิทธิการเบิกจ่าย (MultiSelect) */}
              <div className="col-span-2">
-               <MultiSelect 
-                 label="สิทธิการเบิกจ่าย" 
-                 options={reimbursementOptions} 
-                 value={formData.reimbursement || []} 
-                 onChange={(newVal) => setFormData(prev => ({...prev, reimbursement: newVal}))} 
-               />
+               <MultiSelect label="สิทธิการเบิกจ่าย" options={reimbursementOptions} value={formData.reimbursement || []} onChange={(newVal) => setFormData(prev => ({...prev, reimbursement: newVal}))} />
              </div>
 
              <div className="col-span-2"><label className="block text-sm font-medium text-slate-700 mb-1">ประเภทบัญชียา</label><select name="category" value={formData.category} onChange={handleChange} className="w-full p-2 border rounded-lg">
@@ -330,6 +363,42 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
                  <option>ยาพิเศษที่กำหนดแนวทางการใช้ยา (restricted list; R2) [บัญชี จ.2 เดิม]</option>
                  <option>ยานอกบัญชียาหลักแห่งชาติ</option>
              </select></div>
+
+             {/* --- ✅ ส่วนเลือกกลุ่มยาบัญชีหลักแห่งชาติ (Cascading Dropdown) --- */}
+             <div className="col-span-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <label className="block text-sm font-bold text-slate-700 mb-2">กลุ่มยาตามบัญชียาหลักแห่งชาติ</label>
+                
+                {/* กลุ่มยาหลัก */}
+                <label className="block text-xs text-slate-500 mb-1">หมวดหลัก</label>
+                <select 
+                  name="nlemMain" 
+                  value={formData.nlemMain} 
+                  onChange={handleMainGroupChange} 
+                  className="w-full p-2 border rounded-lg mb-3 bg-white"
+                >
+                  <option value="">-- ไม่ระบุ --</option>
+                  {DRUG_GROUPS.map((item, index) => (
+                    <option key={index} value={item.group}>{item.group}</option>
+                  ))}
+                </select>
+
+                {/* กลุ่มยาย่อย */}
+                <label className="block text-xs text-slate-500 mb-1">หมวดย่อย</label>
+                <select 
+                  name="nlemSub" 
+                  value={formData.nlemSub} 
+                  onChange={handleChange} 
+                  disabled={!formData.nlemMain} 
+                  className="w-full p-2 border rounded-lg bg-white disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                  <option value="">-- ไม่ระบุ --</option>
+                  {availableSubGroups.map((sub, index) => (
+                    <option key={index} value={sub}>{sub}</option>
+                  ))}
+                </select>
+             </div>
+             {/* ----------------------------------------------------------- */}
+
              <div><label className="block text-sm font-medium text-slate-700 mb-1">แพทย์ผู้สามารถสั่งใช้</label><input name="prescriber" value={formData.prescriber} onChange={handleChange} className="w-full p-2 border rounded-lg" /></div>
              <div><label className="block text-sm font-medium text-slate-700 mb-1">สามารถสั่งใช้ได้ใน</label><input name="usageType" value={formData.usageType} onChange={handleChange} className="w-full p-2 border rounded-lg" /></div>
              
@@ -404,7 +473,14 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
             <div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Shield size={18} className="text-emerald-500" /> การสั่งใช้และกฎหมาย</h3><div className="bg-slate-50 p-4 rounded-lg space-y-3">
               <Row label="ประเภทบัญชียา" value={drug.category} />
               
-              {/* แสดงสิทธิการเบิกจ่าย */}
+              {/* แสดงกลุ่มยาบัญชีหลัก (ถ้ามี) */}
+              {drug.nlemMain && (
+                <>
+                  <Row label="กลุ่มยาหลัก" value={drug.nlemMain} />
+                  {drug.nlemSub && <Row label="กลุ่มยาย่อย" value={drug.nlemSub} />}
+                </>
+              )}
+
               {drug.reimbursement && drug.reimbursement.length > 0 && (
                 <div className="flex justify-between items-start text-sm pt-2 border-t border-slate-100 mt-2">
                   <span className="text-slate-500 min-w-[100px] shrink-0">สิทธิเบิกจ่าย:</span>
@@ -450,37 +526,25 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const drugsRef = collection(db, 'drugs');
-    
-    // 1. ดึงข้อมูลทั้งหมดมาก่อน (เรียงตามชื่อ) 
-    // (เอา limit ออก เพื่อให้เราค้นหาข้อมูลทั้งหมดที่มีได้)
     const q = query(drugsRef, orderBy('genericName'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      // แปลงข้อมูลทั้งหมดเป็นรายการ
       let allDrugs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // 2. กรองข้อมูลด้วย JavaScript (ค้นหาทั้ง Generic และ Brand)
       if (searchTerm.trim() !== "") {
-        const lowerTerm = searchTerm.toLowerCase(); // แปลงคำค้นเป็นตัวพิมพ์เล็ก
-        
+        const lowerTerm = searchTerm.toLowerCase();
         allDrugs = allDrugs.filter(drug => {
           const generic = drug.genericName ? drug.genericName.toLowerCase() : "";
           const brand = drug.brandName ? drug.brandName.toLowerCase() : "";
-          
-          // ค้นหาว่ามีคำนี้อยู่ใน ชื่อสามัญ หรือ ชื่อยี่ห้อ หรือไม่
           return generic.includes(lowerTerm) || brand.includes(lowerTerm);
         });
       }
 
-      // 3. กรองประเภท (Filter Type)
       if (filterType !== 'all') {
         allDrugs = allDrugs.filter(drug => drug.type === filterType);
       }
 
-      // 4. ตัดข้อมูลเพื่อแสดงผล (Pagination)
-      // แสดงผลตามจำนวน visibleCount ที่กำหนด
       const visibleList = allDrugs.slice(0, visibleCount);
-      
       setDrugs(visibleList);
       setLoading(false);
       setPermissionError(false);
@@ -511,7 +575,6 @@ export default function App() {
               Yommarat Drug List
             </h1>
             
-            {/* ✅ 2. วางปุ่ม Export ไว้ตรงนี้ครับ (จะโชว์เมื่อเป็น Admin เท่านั้น) */}
             <div className="flex items-center gap-2">
             {isAdmin && <ExportButton db={db} />}
               
@@ -520,7 +583,7 @@ export default function App() {
               </button>
             </div>
           </div>
-          <Form />
+          {/* ❌ ลบ <Form /> ออกแล้วตามคำขอครับ */}
           <div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อยา, ยี่ห้อ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all outline-none" /></div>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setVisibleCount(10); }} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
