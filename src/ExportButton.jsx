@@ -1,9 +1,7 @@
-// ExportButton.jsx
 import React, { useState } from 'react';
 import { collection, getDocs } from "firebase/firestore";
 import * as XLSX from 'xlsx';
 
-// รับตัวแปร db (ฐานข้อมูล) มาจากหน้าบ้านโดยตรง
 const ExportButton = ({ db }) => {
   const [loading, setLoading] = useState(false);
 
@@ -12,21 +10,37 @@ const ExportButton = ({ db }) => {
 
     setLoading(true);
     try {
-      // ดึงข้อมูลจาก collection 'drugs'
+      // 1. ดึงข้อมูลจากฐานข้อมูล
       const querySnapshot = await getDocs(collection(db, "drugs"));
       
-      const data = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      // 2. จัดเตรียมข้อมูล (จุดสำคัญคือตรงนี้ครับ)
+      const data = querySnapshot.docs.map(doc => {
+        const item = doc.data();
+        
+        return {
+          id: doc.id,           // เอา ID มาด้วย
+          ...item,              // เอาข้อมูลอื่นๆ (ชื่อยา, ราคา, ฯลฯ) มาทั้งหมด
+          
+          // --- ✅ ส่วนที่ตัดข้อมูลไฟล์ใหญ่ออก ---
+          // ถ้ามีรูป ให้ใส่คำว่า "มีรูปภาพ" แทนโค้ดยาวๆ
+          image: item.image ? "มีรูปภาพ" : "ไม่มีรูป", 
+          
+          // ถ้ามีเอกสาร PDF ให้ใส่คำว่า "มีเอกสาร" แทนโค้ดยาวๆ
+          leaflet: item.leaflet ? "มีเอกสาร PDF" : "ไม่มีเอกสาร"
+          // ------------------------------------
+        };
+      });
 
+      // 3. สร้างไฟล์ Excel
       const worksheet = XLSX.utils.json_to_sheet(data);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "DrugData");
+      
+      // 4. สั่งดาวน์โหลด
       XLSX.writeFile(workbook, "DrugData_Yom.xlsx");
 
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error exporting:", error);
       alert("เกิดข้อผิดพลาด: " + error.message);
     } finally {
       setLoading(false);
@@ -38,7 +52,7 @@ const ExportButton = ({ db }) => {
       onClick={handleExport}
       disabled={loading}
       style={{
-        backgroundColor: '#198754',
+        backgroundColor: '#198754', // สีเขียว Excel
         color: 'white',
         padding: '6px 12px',
         border: 'none',
@@ -46,13 +60,14 @@ const ExportButton = ({ db }) => {
         cursor: loading ? 'wait' : 'pointer',
         marginLeft: '10px',
         fontSize: '14px',
+        fontWeight: 'bold',
         display: 'flex',
         alignItems: 'center',
         gap: '5px'
       }}
     >
       <span>📥</span> 
-      {loading ? '...' : 'Excel'}
+      {loading ? 'กำลังโหลด...' : 'Excel'}
     </button>
   );
 };
