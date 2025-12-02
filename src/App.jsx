@@ -4,6 +4,9 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, limit, orderBy, where } from 'firebase/firestore';
 
+// ✅ 1. เพิ่มบรรทัดนี้เพื่อนำปุ่ม Export เข้ามา
+import ExportButton from './ExportButton';
+
 // --- Firebase Configuration ---
 const firebaseConfig = {
   apiKey: "AIzaSyD8vn9ipMGLVGPuLqKZg6_599Rhv1-Y-24",
@@ -480,11 +483,26 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 font-sans relative">
       <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-10">
         <div className="max-w-md mx-auto">
-          <div className="flex justify-between items-center mb-4"><h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><div className="bg-blue-600 text-white p-2 rounded-lg"><Pill size={20} /></div> Yommarat Drug List</h1><button onClick={handleAdminToggle} className={`p-2 rounded-full transition-colors ${isAdmin ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`} title={isAdmin ? "ออกจากโหมดผู้ดูแล" : "เข้าสู่โหมดผู้ดูแล"}>{isAdmin ? <Unlock size={20}/> : <Lock size={20}/>}</button></div>
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+              <div className="bg-blue-600 text-white p-2 rounded-lg"><Pill size={20} /></div> 
+              Yommarat Drug List
+            </h1>
+            
+            {/* ✅ 2. วางปุ่ม Export ไว้ตรงนี้ครับ (จะโชว์เมื่อเป็น Admin เท่านั้น) */}
+            <div className="flex items-center gap-2">
+            {isAdmin && <ExportButton db={db} />}
+              
+              <button onClick={handleAdminToggle} className={`p-2 rounded-full transition-colors ${isAdmin ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`} title={isAdmin ? "ออกจากโหมดผู้ดูแล" : "เข้าสู่โหมดผู้ดูแล"}>
+                {isAdmin ? <Unlock size={20}/> : <Lock size={20}/>}
+              </button>
+            </div>
+          </div>
+          
           <div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อยา, ยี่ห้อ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all outline-none" /></div>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setVisibleCount(10); }} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="all">💊 แสดงทั้งหมดยา</option><option value="injection">💉 ยาฉีด (Injection)</option><option value="oral">💊 ยากิน (Oral)</option><option value="sublingual">👅 ยาอมใต้ลิ้น</option><option value="external">🧴 ยาใช้ภายนอก</option><option value="topical">🩹 ยาเฉพาะที่</option>
+              <option value="all">💊 แสดงทั้งหมด</option><option value="injection">💉 ยาฉีด (Injection)</option><option value="oral">💊 ยากิน (Oral)</option><option value="sublingual">👅 ยาอมใต้ลิ้น</option><option value="external">🧴 ยาใช้ภายนอก</option><option value="topical">🩹 ยาเฉพาะที่</option>
             </select>
           </div>
         </div>
