@@ -362,6 +362,7 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
                  <option>ยาสำหรับโครงการพิเศษของหน่วยงานของรัฐ (restricted list; R1) [บัญชี จ.1 เดิม]</option>
                  <option>ยาพิเศษที่กำหนดแนวทางการใช้ยา (restricted list; R2) [บัญชี จ.2 เดิม]</option>
                  <option>ยานอกบัญชียาหลักแห่งชาติ</option>
+                 <option>ยาสมุนไพร</option>
              </select></div>
 
              {/* --- ✅ ส่วนเลือกกลุ่มยาบัญชีหลักแห่งชาติ (Cascading Dropdown) --- */}
