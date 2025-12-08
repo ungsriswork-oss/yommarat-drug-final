@@ -1,4 +1,4 @@
-// --- FULL CODE: Firebase Storage Support (Large Files) + Staff Login + Fixes (Complete) ---
+// --- FULL CODE: Custom File Size Limits (0.3MB & 1.5MB) ---
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, User } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
@@ -14,7 +14,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyD8vn9ipMGLVGPuLqKZg6_599Rhv1-Y-24",
   authDomain: "drug-database-yom-c18f5.firebaseapp.com",
   projectId: "drug-database-yom-c18f5",
-  storageBucket: "drug-database-yom-c18f5.firebasestorage.app", // ✅ Bucket ที่ถูกต้อง
+  storageBucket: "drug-database-yom-c18f5.firebasestorage.app", // ✅ Bucket ของคุณ
   messagingSenderId: "949962071846",
   appId: "1:949962071846:web:69ca662e47233920f6abe7",
   measurementId: "G-6MN9T3MV6B"
@@ -78,25 +78,50 @@ const MultiSelect = ({ label, options, value = [], onChange }) => {
   );
 };
 
-const FileUploader = ({ label, onFileSelect, previewUrl, initialUrl, maxSizeKB = 5000 }) => {
+// 3. FileUploader (Updated Logic for KB/MB display)
+const FileUploader = ({ label, onFileSelect, previewUrl, initialUrl, maxSizeKB }) => {
   const fileInputRef = useRef(null);
   const [error, setError] = useState("");
+  
+  // คำนวณข้อความแสดงขนาดไฟล์ให้สวยงาม
+  const displaySizeLimit = maxSizeKB >= 1024 
+    ? `${(maxSizeKB / 1024).toFixed(1)} MB` 
+    : `${maxSizeKB} KB`;
+
   const handleFileChange = (e) => {
     const file = e.target.files[0]; if (!file) return;
-    const maxSize = maxSizeKB * 1024; 
-    if (file.size > maxSize) { setError(`ไฟล์ใหญ่เกินไป (ต้องไม่เกิน ${maxSizeKB/1024} MB)`); return; }
+    const maxSize = maxSizeKB * 1024; // KB -> Bytes
+    
+    if (file.size > maxSize) { 
+      setError(`ไฟล์ใหญ่เกินไป (ต้องไม่เกิน ${displaySizeLimit})`); 
+      return; 
+    }
+    
     const reader = new FileReader();
     reader.onloadend = () => { onFileSelect(reader.result, file); setError(""); };
     reader.onerror = () => { setError("อ่านไฟล์ไม่สำเร็จ"); };
     reader.readAsDataURL(file);
   };
+
   const isPdf = previewUrl?.startsWith('data:application/pdf') || initialUrl?.includes('.pdf') || initialUrl?.includes('alt=media');
+  
   return (
     <div className="col-span-2">
-      <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">{label} <span className="text-xs text-slate-400 font-normal">(รองรับไฟล์สูงสุด {maxSizeKB/1024} MB)</span></label>
+      <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+        {label} <span className="text-xs text-slate-400 font-normal">(สูงสุด {displaySizeLimit})</span>
+      </label>
       <div className="flex gap-3 items-start">
-        <div className="flex-1"><div onClick={() => fileInputRef.current?.click()} className="w-full p-3 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center gap-2 text-slate-500"><UploadCloud size={20} /><span className="text-sm">คลิกเพื่อเลือกไฟล์</span></div><input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg, application/pdf" className="hidden" />{error && <p className="text-red-500 text-xs mt-1">{error}</p>}</div>
-        <div className="w-20 h-20 shrink-0 border rounded-lg overflow-hidden bg-white relative shadow-sm"><MediaDisplay src={previewUrl || initialUrl} className="w-full h-full object-cover" isPdf={isPdf} />{(previewUrl || initialUrl) && (<button onClick={() => onFileSelect("", null)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl shadow-sm hover:bg-red-600" title="ลบรูป"><X size={12} /></button>)}</div>
+        <div className="flex-1">
+          <div onClick={() => fileInputRef.current?.click()} className="w-full p-3 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center gap-2 text-slate-500">
+            <UploadCloud size={20} /><span className="text-sm">คลิกเพื่อเลือกไฟล์</span>
+          </div>
+          <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg, application/pdf" className="hidden" />
+          {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+        </div>
+        <div className="w-20 h-20 shrink-0 border rounded-lg overflow-hidden bg-white relative shadow-sm">
+           <MediaDisplay src={previewUrl || initialUrl} className="w-full h-full object-cover" isPdf={isPdf} />
+           {(previewUrl || initialUrl) && (<button onClick={() => onFileSelect("", null)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl shadow-sm hover:bg-red-600" title="ลบรูป"><X size={12} /></button>)}
+        </div>
       </div>
     </div>
   );
@@ -187,9 +212,33 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
              {formData.type === 'injection' && (<div className="col-span-2 bg-rose-50 p-3 rounded-lg border border-rose-100 mt-2"><p className="text-rose-700 text-sm font-bold mb-2">ข้อมูลสำหรับยาฉีด</p><label className="block text-sm font-medium text-slate-700 mb-1">สารละลายที่ใช้</label><textarea name="diluent" rows="2" value={formData.diluent} onChange={handleChange} className="w-full p-2 border rounded-lg bg-white mb-2 resize-y" /><label className="block text-sm font-medium text-slate-700 mb-1">ความคงตัว</label><textarea name="stability" rows="2" value={formData.stability} onChange={handleChange} className="w-full p-2 border rounded-lg bg-white resize-y mb-2"/><label className="block text-sm font-medium text-slate-700 mb-1">วิธีการบริหาร</label><textarea name="administration" rows="2" value={formData.administration} onChange={handleChange} className="w-full p-2 border rounded-lg bg-white resize-y" placeholder="เช่น รับประทานหลังอาหาร, IV drip 30 นาที..."/></div>)}
              <div className="col-span-2 mt-4"><label className="block text-sm font-bold text-orange-600 mb-1 flex items-center gap-1"><Info size={16}/> หมายเหตุเพิ่มเติม</label><textarea name="note" rows="2" value={formData.note || ""} onChange={handleChange} className="w-full p-2 border rounded-lg bg-orange-50 focus:bg-white transition-colors resize-y border-orange-200 focus:border-orange-400" placeholder="ระบุข้อมูลเพิ่มเติม หรือข้อควรระวัง (ถ้ามี)..." /></div>
              <div className="col-span-2"><hr className="my-2"/></div>
-             <FileUploader label="รูปผลิตภัณฑ์" initialUrl={getDisplayImageUrl(formData.image)} previewUrl={formData.image} onFileSelect={(base64, file) => handleFileSelect('image', base64, file)} maxSizeKB={5000}/>
-             <FileUploader label="เอกสารกำกับยา (Leaflet)" initialUrl={getDisplayImageUrl(formData.leaflet)} previewUrl={formData.leaflet} onFileSelect={(base64, file) => handleFileSelect('leaflet', base64, file)} maxSizeKB={5000}/>
-             <FileUploader label="เอกสารที่เกี่ยวข้อง" initialUrl={getDisplayImageUrl(formData.relatedDocument)} previewUrl={formData.relatedDocument} onFileSelect={(base64, file) => handleFileSelect('relatedDocument', base64, file)} maxSizeKB={5000} />
+             
+             {/* ✅ 1. รูปผลิตภัณฑ์: 300 KB */}
+             <FileUploader 
+               label="รูปผลิตภัณฑ์" 
+               initialUrl={getDisplayImageUrl(formData.image)} 
+               previewUrl={formData.image} 
+               onFileSelect={(base64, file) => handleFileSelect('image', base64, file)} 
+               maxSizeKB={300} 
+             />
+             
+             {/* ✅ 2. เอกสารกำกับยา: 1.5 MB (1500 KB) */}
+             <FileUploader 
+               label="เอกสารกำกับยา (Leaflet)" 
+               initialUrl={getDisplayImageUrl(formData.leaflet)} 
+               previewUrl={formData.leaflet} 
+               onFileSelect={(base64, file) => handleFileSelect('leaflet', base64, file)} 
+               maxSizeKB={1500}
+             />
+
+             {/* ✅ 3. เอกสารที่เกี่ยวข้อง: 1.5 MB (1500 KB) */}
+             <FileUploader 
+               label="เอกสารที่เกี่ยวข้อง" 
+               initialUrl={getDisplayImageUrl(formData.relatedDocument)} 
+               previewUrl={formData.relatedDocument} 
+               onFileSelect={(base64, file) => handleFileSelect('relatedDocument', base64, file)} 
+               maxSizeKB={1500} 
+             />
           </div>
           <button onClick={handleSaveWrapper} disabled={isUploading} className={`w-full py-3 text-white rounded-lg font-bold flex items-center justify-center gap-2 mt-4 ${isUploading ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'}`}>{isUploading ? "กำลังอัปโหลด..." : <><Save size={20} /> บันทึกข้อมูล</>}</button>
         </div>
