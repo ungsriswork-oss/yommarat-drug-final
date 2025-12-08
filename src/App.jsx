@@ -1,9 +1,9 @@
-// --- FULL CODE: Auto-Delete (Fetch First Logic) + Logs ---
+// --- FULL CODE: FIX Delete Logic (Fetch & Delete) ---
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, User } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-// ✅ 1. เพิ่ม getDoc เข้ามาใน import
+// ✅ 1. เพิ่ม getDoc เข้ามาใน import (สำคัญมาก!)
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
@@ -15,7 +15,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyD8vn9ipMGLVGPuLqKZg6_599Rhv1-Y-24",
   authDomain: "drug-database-yom-c18f5.firebaseapp.com",
   projectId: "drug-database-yom-c18f5",
-  storageBucket: "drug-database-yom-c18f5.firebasestorage.app", // ✅ Bucket
+  storageBucket: "drug-database-yom-c18f5.firebasestorage.app",
   messagingSenderId: "949962071846",
   appId: "1:949962071846:web:69ca662e47233920f6abe7",
   measurementId: "G-6MN9T3MV6B"
@@ -308,16 +308,16 @@ export default function App() {
   const handleSaveDrug = async (drugData) => { try { const collRef = collection(db, 'drugs'); const dataToSave = { ...drugData, lastUpdated: serverTimestamp(), updatedBy: "Admin" }; if (drugData.id) { const docRef = doc(db, 'drugs', drugData.id); const { id, ...dataToUpdate } = dataToSave; await updateDoc(docRef, dataToUpdate); } else { const { id, ...newData } = dataToSave; await addDoc(collRef, newData); } setIsFormOpen(false); setSelectedDrug(null); setIsEditing(false); } catch (error) { console.error("Error saving drug:", error); alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล"); } };
   const requestDeleteDrug = (id) => { setDrugToDelete(id); };
   
-  // ✅ 2. ฟังก์ชันลบที่ได้รับการปรับปรุงใหม่ (Fetch First)
+  // ✅ 2. เปลี่ยนเป็นฟังก์ชันลบแบบ "Fetch-First" (ดึงข้อมูล DB ก่อนลบ)
   const confirmDeleteDrug = async () => { 
     if (!drugToDelete) return; 
     
     try { 
       console.log("🔥 เริ่มต้นกระบวนการลบ ID:", drugToDelete);
 
-      // 2.1 ดึงข้อมูลยาตัวนั้นจาก Database โดยตรง (เพื่อให้ได้ URL ไฟล์ที่ถูกต้องแน่นอน)
+      // 2.1 ดึงข้อมูลยาจาก Database (เพื่อเอา URL ที่ถูกต้อง)
       const docRef = doc(db, 'drugs', drugToDelete);
-      const docSnap = await getDoc(docRef);
+      const docSnap = await getDoc(docRef); // ใช้ getDoc ที่เพิ่มเข้ามา
 
       if (!docSnap.exists()) {
         console.error("❌ ไม่พบข้อมูลยานี้ใน Database (อาจถูกลบไปแล้ว)");
@@ -327,9 +327,9 @@ export default function App() {
       }
 
       const drugData = docSnap.data();
-      console.log("📄 พบข้อมูลยาที่จะลบ:", drugData);
+      console.log("📄 พบข้อมูลยาที่จะลบ (มี URL ไหม?):", drugData);
 
-      // 2.2 ฟังก์ชันย่อยสำหรับลบไฟล์
+      // 2.2 ฟังก์ชันย่อยสำหรับลบไฟล์ใน Storage
       const deleteFileIfExists = async (url, fileType) => {
          if (!url) {
             console.log(`⚪ ${fileType}: ไม่มีไฟล์แนบ (ข้าม)`);
@@ -341,7 +341,7 @@ export default function App() {
             console.log(`🗑️ กำลังลบ ${fileType}:`, url);
             try {
                const fileRef = ref(storage, url);
-               await deleteObject(fileRef);
+               await deleteObject(fileRef); // สั่งลบไฟล์
                console.log(`✅ ลบ ${fileType} สำเร็จ!`);
             } catch (err) {
                console.warn(`⚠️ ลบ ${fileType} ไม่สำเร็จ (อาจไม่มีไฟล์อยู่จริง):`, err.message);
@@ -351,7 +351,7 @@ export default function App() {
          }
       };
 
-      // 2.3 สั่งลบทั้ง 3 ไฟล์ (ถ้ามี)
+      // 2.3 สั่งลบไฟล์ทั้ง 3 ช่อง (ถ้ามี)
       await deleteFileIfExists(drugData.image, "รูปผลิตภัณฑ์");
       await deleteFileIfExists(drugData.leaflet, "เอกสารกำกับยา");
       await deleteFileIfExists(drugData.relatedDocument, "เอกสารที่เกี่ยวข้อง");
