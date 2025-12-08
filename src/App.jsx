@@ -1,3 +1,4 @@
+// --- FULL CODE with Debugging Log ---
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
@@ -6,7 +7,6 @@ import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot
 
 // ✅ นำเข้าข้อมูลกลุ่มยาจากไฟล์ Form.jsx
 import { DRUG_GROUPS } from './Form';
-// ✅ นำเข้าปุ่ม Export (ต้องแน่ใจว่าไฟล์ ExportButton.jsx มีการ export ExportButton)
 // import ExportButton from './ExportButton'; 
 
 // --- Firebase Configuration ---
@@ -488,6 +488,16 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const displayLeaflet = getDisplayImageUrl(drug.leaflet);
   const displayRelatedDoc = getDisplayImageUrl(drug.relatedDocument); // <-- New field
   
+  // New: Debugging log (Only logs if data exists)
+  useEffect(() => {
+    if (drug.relatedDocument) {
+      console.log("--- DEBUG: Related Document Data Status ---");
+      console.log("relatedDocLength:", drug.relatedDocument.length);
+      console.log("displayUrl status (truthy?):", !!displayRelatedDoc);
+      console.log("---------------------------------------");
+    }
+  }, [drug, displayRelatedDoc]);
+  
   const InfoItem = ({ icon, label, value }) => (<div><div className="flex items-center gap-1 text-slate-500 text-xs mb-1">{icon} {label}</div><div className="font-medium text-slate-800">{value || "-"}</div></div>);
   const Row = ({ label, value }) => (<div className="flex justify-between items-start text-sm"><span className="text-slate-500 min-w-[100px] shrink-0">{label}:</span><span className="text-slate-800 font-medium text-right flex-1 whitespace-pre-wrap">{value || "-"}</span></div>);
 
@@ -567,7 +577,7 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
             {/* ส่วนปุ่มดาวน์โหลดเอกสาร */}
             <div className="space-y-3 mt-4">
               {displayLeaflet && (<button onClick={() => handleOpenFile(displayLeaflet)} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"><FileText size={20} /> ดูเอกสารกำกับยา (PDF)</button>)}
-              {displayRelatedDoc && (<button onClick={() => handleOpenFile(displayRelatedDoc)} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"><CheckSquare size={20} /> ดูเอกสารที่เกี่ยวข้อง</button>)} 
+              {drug.relatedDocument && (<button onClick={() => handleOpenFile(displayRelatedDoc)} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"><CheckSquare size={20} /> ดูเอกสารที่เกี่ยวข้อง</button>)} 
             </div>
 
           </div>
@@ -577,7 +587,7 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   );
 };
 
-const INITIAL_DATA = [{genericName: "Paracetamol", brandName: "Tylenol", manufacturer: "Janssen", dosage: "Tab 500 mg", category: "ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]", prescriber: "", usageType: "", administration: "-", diluent: "-", stability: "-", image: "", leaflet: "", type: "oral"}];
+const INITIAL_DATA = [{genericName: "Paracetamol", brandName: "Tylenol", manufacturer: "Janssen", dosage: "Tab 500 mg", category: "ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]", prescriber: "", usageType: "", administration: "-", diluent: "-", stability: "-", image: "", leaflet: "", relatedDocument: "", type: "oral"}];
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -625,12 +635,10 @@ export default function App() {
         allDrugs = allDrugs.filter(drug => drug.type === filterType);
       }
       
-      // ✅ NEW: Filter by NLEM Main Group
       if (nlemMainFilter !== 'all') {
         allDrugs = allDrugs.filter(drug => drug.nlemMain === nlemMainFilter);
       }
 
-      // ✅ NEW: Filter by NLEM Sub Group
       if (nlemSubFilter !== 'all') {
         allDrugs = allDrugs.filter(drug => drug.nlemSub === nlemSubFilter);
       }
@@ -727,7 +735,7 @@ export default function App() {
       </main>
       {isAdmin && (<div className="fixed bottom-6 right-6 z-40"><button onClick={() => { setIsEditing(false); setIsFormOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"><Plus size={24} /> <span className="font-bold hidden md:inline">เพิ่มยา</span></button></div>)}
       {selectedDrug && !isEditing && (<DetailModal drug={selectedDrug} onClose={() => setSelectedDrug(null)} onEdit={() => { setIsEditing(true); setIsFormOpen(true); }} onDelete={requestDeleteDrug} isAdmin={isAdmin} />)}
-      {isFormOpen && isAdmin && (<DrugFormModal initialData={isEditing ? selectedDrug : null} onClose={() => { setIsFormOpen(false); setIsEditing(false); }} onSave={handleSaveDrug} />)}
+      {isFormOpen && isAdmin && (<DrugFormModal initialData={isEditing ? selectedDrug : null} onClose={() => { setIsFormForm(false); setIsEditing(false); }} onSave={handleSaveDrug} />)}
       {isLoginModalOpen && (<AdminLoginModal onClose={() => setIsLoginModalOpen(false)} onLogin={() => setIsAdmin(true)} />)}
       <ConfirmModal isOpen={!!drugToDelete} onClose={() => setDrugToDelete(null)} onConfirm={confirmDeleteDrug} title="ยืนยันการลบ" message="คุณแน่ใจหรือไม่ที่จะลบข้อมูลยานี้? การกระทำนี้ไม่สามารถย้อนกลับได้" />
     </div>
