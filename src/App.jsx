@@ -501,7 +501,7 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
             {/* แถวล่าง: เวลาแก้ไขล่าสุด (ตัวเล็ก อยู่ใต้ Icon) */}
             {drug.lastUpdated && (
                 <span className="text-[10px] text-slate-400 font-light tracking-wide">
-                  แก้ไข: {formatDate(drug.lastUpdated)}
+                  แก้ไขเมื่อ: {formatDate(drug.lastUpdated)}
                 </span>
             )}
           </div>
