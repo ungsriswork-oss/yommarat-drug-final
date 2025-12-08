@@ -453,22 +453,22 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
 
              <div className="col-span-2"><hr className="my-2"/></div>
              
-             {/* 1. รูปผลิตภัณฑ์ (700KB) */}
+             {/* 1. รูปผลิตภัณฑ์ (400KB) */}
              <FileUploader 
                label="รูปผลิตภัณฑ์" 
                initialUrl={getDisplayImageUrl(formData.image)} 
                previewUrl={formData.image} 
                onFileSelect={(base64) => setFormData(prev => ({...prev, image: base64}))} 
-               maxSizeKB={700}
+               maxSizeKB={400}
              />
              
-             {/* 2. เอกสารกำกับยา (700KB) */}
+             {/* 2. เอกสารกำกับยา (600KB) */}
              <FileUploader 
                label="เอกสารกำกับยา (Leaflet)" 
                initialUrl={getDisplayImageUrl(formData.leaflet)} 
                previewUrl={formData.leaflet} 
                onFileSelect={(base64) => setFormData(prev => ({...prev, leaflet: base64}))} 
-               maxSizeKB={700}
+               maxSizeKB={600}
              />
 
              {/* 3. เอกสารที่เกี่ยวข้อง (300KB) */}
@@ -776,7 +776,7 @@ export default function App() {
           <div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อยา, ยี่ห้อ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all outline-none" /></div>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setNlemMainFilter('all'); setNlemSubFilter('all'); setVisibleCount(10); }} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="all">💊 แสดงทั้งหมดยา</option><option value="injection">💉 ยาฉีด (Injection)</option><option value="oral">💊 ยากิน (Oral)</option><option value="sublingual">👅 ยาอมใต้ลิ้น</option><option value="external">🧴 ยาใช้ภายนอก</option><option value="topical">🩹 ยาเฉพาะที่</option>
+              <option value="all">💊 แสดงทั้งหมด</option><option value="injection">💉 ยาฉีด (Injection)</option><option value="oral">💊 ยากิน (Oral)</option><option value="sublingual">👅 ยาอมใต้ลิ้น</option><option value="external">🧴 ยาใช้ภายนอก</option><option value="topical">🩹 ยาเฉพาะที่</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-2 pb-1 no-scrollbar">
