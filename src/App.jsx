@@ -1,4 +1,4 @@
-// --- FULL CODE with Debugging Log ---
+// --- FULL CODE with All Features and Final Fixes ---
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
@@ -307,7 +307,7 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
     reimbursement: initialData?.reimbursement || [], 
     image: initialData?.image || "",
     leaflet: initialData?.leaflet || "",
-    relatedDocument: initialData?.relatedDocument || "", 
+    relatedDocument: initialData?.relatedDocument || "", // <-- เพิ่ม field ใหม่
     type: initialData?.type || "injection",
     id: initialData?.id || null
   });
@@ -448,31 +448,31 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
 
              <div className="col-span-2"><hr className="my-2"/></div>
              
-             {/* 1. รูปผลิตภัณฑ์ (300KB) */}
+             {/* 1. รูปผลิตภัณฑ์ (700KB) */}
              <FileUploader 
                label="รูปผลิตภัณฑ์" 
                initialUrl={getDisplayImageUrl(formData.image)} 
                previewUrl={formData.image} 
                onFileSelect={(base64) => setFormData(prev => ({...prev, image: base64}))} 
-               maxSizeKB={300}
+               maxSizeKB={700}
              />
              
-             {/* 2. เอกสารกำกับยา (600KB) */}
+             {/* 2. เอกสารกำกับยา (700KB) */}
              <FileUploader 
                label="เอกสารกำกับยา (Leaflet)" 
                initialUrl={getDisplayImageUrl(formData.leaflet)} 
                previewUrl={formData.leaflet} 
                onFileSelect={(base64) => setFormData(prev => ({...prev, leaflet: base64}))} 
-               maxSizeKB={600}
+               maxSizeKB={700}
              />
 
-             {/* 3. เอกสารที่เกี่ยวข้อง (500KB) <-- เพิ่มใหม่ */}
+             {/* 3. เอกสารที่เกี่ยวข้อง (300KB) */}
              <FileUploader 
                label="เอกสารที่เกี่ยวข้อง" 
                initialUrl={getDisplayImageUrl(formData.relatedDocument)} 
                previewUrl={formData.relatedDocument} 
                onFileSelect={(base64) => setFormData(prev => ({...prev, relatedDocument: base64}))} 
-               maxSizeKB={500} // <-- กำหนดขนาด 300KB
+               maxSizeKB={300} // <-- กำหนดขนาด 300KB
              />
 
           </div>
@@ -486,7 +486,7 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
 const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const displayImage = getDisplayImageUrl(drug.image);
   const displayLeaflet = getDisplayImageUrl(drug.leaflet);
-  const displayRelatedDoc = getDisplayImageUrl(drug.relatedDocument); // <-- New field
+  const displayRelatedDoc = getDisplayImageUrl(drug.relatedDocument); 
   
   // New: Debugging log (Only logs if data exists)
   useEffect(() => {
@@ -735,7 +735,7 @@ export default function App() {
       </main>
       {isAdmin && (<div className="fixed bottom-6 right-6 z-40"><button onClick={() => { setIsEditing(false); setIsFormOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"><Plus size={24} /> <span className="font-bold hidden md:inline">เพิ่มยา</span></button></div>)}
       {selectedDrug && !isEditing && (<DetailModal drug={selectedDrug} onClose={() => setSelectedDrug(null)} onEdit={() => { setIsEditing(true); setIsFormOpen(true); }} onDelete={requestDeleteDrug} isAdmin={isAdmin} />)}
-      {isFormOpen && isAdmin && (<DrugFormModal initialData={isEditing ? selectedDrug : null} onClose={() => { setIsFormForm(false); setIsEditing(false); }} onSave={handleSaveDrug} />)}
+      {isFormOpen && isAdmin && (<DrugFormModal initialData={isEditing ? selectedDrug : null} onClose={() => { setIsFormOpen(false); setIsEditing(false); }} onSave={handleSaveDrug} />)}
       {isLoginModalOpen && (<AdminLoginModal onClose={() => setIsLoginModalOpen(false)} onLogin={() => setIsAdmin(true)} />)}
       <ConfirmModal isOpen={!!drugToDelete} onClose={() => setDrugToDelete(null)} onConfirm={confirmDeleteDrug} title="ยืนยันการลบ" message="คุณแน่ใจหรือไม่ที่จะลบข้อมูลยานี้? การกระทำนี้ไม่สามารถย้อนกลับได้" />
     </div>
