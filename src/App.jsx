@@ -574,10 +574,25 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
             {drug.type === 'injection' && (<div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Thermometer size={18} className="text-rose-500" /> การผสมและการเก็บรักษา</h3><div className="bg-rose-50 p-4 rounded-lg space-y-3 border border-rose-100"><Row label="สารละลายที่ใช้" value={drug.diluent} /><Row label="ความคงตัว" value={drug.stability} /><Row label="วิธีการบริหาร" value={drug.administration} /></div></div>)}
             {drug.note && (<div className="bg-orange-50 border border-orange-100 p-4 rounded-lg"><h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2 text-sm"><Info size={16} /> หมายเหตุเพิ่มเติม</h3><p className="text-slate-700 text-sm whitespace-pre-wrap">{drug.note}</p></div>)}
             
-            {/* ส่วนปุ่มดาวน์โหลดเอกสาร */}
+            {/* ส่วนปุ่มดาวน์โหลดเอกสาร (แก้ไขที่นี่) */}
             <div className="space-y-3 mt-4">
-              {displayLeaflet && (<button onClick={() => handleOpenFile(displayLeaflet)} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"><FileText size={20} /> ดูเอกสารกำกับยา (PDF)</button>)}
-              {drug.relatedDocument && (<button onClick={() => handleOpenFile(displayRelatedDoc)} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"><CheckSquare size={20} /> ดูเอกสารที่เกี่ยวข้อง</button>)} 
+              {displayLeaflet && (
+                <button 
+                  onClick={() => handleOpenFile(displayLeaflet)} 
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"
+                >
+                  <FileText size={20} /> ดูเอกสารกำกับยา (PDF)
+                </button>
+              )}
+              {drug.relatedDocument && (
+                <button 
+                  onClick={() => handleOpenFile(displayRelatedDoc)} 
+                  // คลาส Tailwind CSS ถูกเปลี่ยนเป็น bg-emerald-600 เพื่อให้เป็นสีเขียว
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"
+                >
+                  <CheckSquare size={20} /> เอกสารที่เกี่ยวข้อง
+                </button>
+              )} 
             </div>
 
           </div>
