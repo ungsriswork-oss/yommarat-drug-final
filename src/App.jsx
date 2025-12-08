@@ -1,4 +1,4 @@
-// --- FULL CODE with All Features and Final Fixes (V5: Fix Firestore Error Check) ---
+// --- FULL CODE with All Features and Final Fixes (V6: Export Button in Admin Mode & Firebase Fix) ---
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare, Download } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
@@ -12,7 +12,7 @@ let ExportButton;
 try {
   ExportButton = require('./ExportButton').default;
 } catch (e) {
-  console.warn("ExportButton.jsx not found or error importing. Using dummy button.");
+  // console.warn("ExportButton.jsx not found or error importing. Using dummy button.");
 }
 
 
@@ -33,8 +33,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // --- Helper Functions ---
-// ... (Helper Functions คงเดิม)
-
 const getDisplayImageUrl = (url) => {
   if (!url || typeof url !== 'string') return "";
   if (url.startsWith('data:')) return url;
@@ -662,52 +660,55 @@ export default function App() {
   
   useEffect(() => {
     if (!user) return;
-    const drugsRef = collection(db, 'drugs');
-    const q = query(drugsRef, orderBy('genericName'));
+    try {
+        const drugsRef = collection(db, 'drugs');
+        const q = query(drugsRef, orderBy('genericName'));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      let allDrugs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // เก็บข้อมูลยา "ทั้งหมด" สำหรับ Export (ควรเก็บทั้งหมดก่อน Filter)
-      setAllDrugsForExport(allDrugs); 
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          let allDrugs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          setAllDrugsForExport(allDrugs); 
 
-      // ทำการ Filter
-      let filteredDrugs = allDrugs;
+          let filteredDrugs = allDrugs;
 
-      if (searchTerm.trim() !== "") {
-        const lowerTerm = searchTerm.toLowerCase();
-        filteredDrugs = filteredDrugs.filter(drug => {
-          const generic = drug.genericName ? drug.genericName.toLowerCase() : "";
-          const brand = drug.brandName ? drug.brandName.toLowerCase() : "";
-          return generic.includes(lowerTerm) || brand.includes(lowerTerm);
+          if (searchTerm.trim() !== "") {
+            const lowerTerm = searchTerm.toLowerCase();
+            filteredDrugs = filteredDrugs.filter(drug => {
+              const generic = drug.genericName ? drug.genericName.toLowerCase() : "";
+              const brand = drug.brandName ? drug.brandName.toLowerCase() : "";
+              return generic.includes(lowerTerm) || brand.includes(lowerTerm);
+            });
+          }
+
+          if (filterType !== 'all') {
+            filteredDrugs = filteredDrugs.filter(drug => drug.type === filterType);
+          }
+          
+          if (nlemMainFilter !== 'all') {
+            filteredDrugs = filteredDrugs.filter(drug => drug.nlemMain === nlemMainFilter);
+          }
+
+          if (nlemSubFilter !== 'all') {
+            filteredDrugs = filteredDrugs.filter(drug => drug.nlemSub === nlemSubFilter);
+          }
+          
+          const visibleList = filteredDrugs.slice(0, visibleCount);
+          setDrugs(visibleList); 
+          setLoading(false);
+          setPermissionError(false);
+        }, (error) => { 
+          console.error("Firestore error in onSnapshot:", error); 
+          setLoading(false); 
+          if (error.code === 'permission-denied') setPermissionError(true);
         });
-      }
+        
+        return () => unsubscribe();
+    } catch(e) {
+        console.error("Error setting up Firestore listener (check Firebase init/config):", e);
+        setLoading(false);
+        setPermissionError(true);
+    }
 
-      if (filterType !== 'all') {
-        filteredDrugs = filteredDrugs.filter(drug => drug.type === filterType);
-      }
-      
-      if (nlemMainFilter !== 'all') {
-        filteredDrugs = filteredDrugs.filter(drug => drug.nlemMain === nlemMainFilter);
-      }
-
-      if (nlemSubFilter !== 'all') {
-        filteredDrugs = filteredDrugs.filter(drug => drug.nlemSub === nlemSubFilter);
-      }
-      
-      const visibleList = filteredDrugs.slice(0, visibleCount);
-      setDrugs(visibleList); // แสดงเฉพาะส่วนที่ต้องแสดง
-      setLoading(false);
-      setPermissionError(false);
-    }, (error) => { 
-      console.error("Firestore error in onSnapshot:", error); 
-      setLoading(false); 
-      if (error.code === 'permission-denied') setPermissionError(true);
-      // หากเกิด error ที่นี่ อาจหมายความว่า Rule ผิดพลาด (permission-denied)
-      // หรือการเชื่อมต่อมีปัญหา
-    });
-    
-    return () => unsubscribe();
   }, [user, searchTerm, visibleCount, filterType, nlemMainFilter, nlemSubFilter]);
 
   const handleAdminToggle = () => { if (isAdmin) { setIsAdmin(false); } else { setIsLoginModalOpen(true); } };
@@ -745,14 +746,12 @@ export default function App() {
   // *** โค้ดที่แก้ไขสำหรับการเพิ่มข้อมูลตัวอย่าง (ป้องกัน Error) ***
   const handleAddSeedData = async () => { 
     try { 
-      // 1. ตรวจสอบว่า db instance ถูกต้องหรือไม่
-      if (!db || typeof collection !== 'function') {
-        alert("Firestore DB instance หรือ function collection ไม่พร้อมใช้งาน");
+      if (!db) {
+        alert("Firestore DB instance ไม่พร้อมใช้งาน กรุณาตรวจสอบ Firebase Config");
         return;
       }
       const collRef = collection(db, 'drugs'); 
       
-      // 2. ตรวจสอบว่ามีข้อมูลสำหรับเพิ่มหรือไม่
       if (INITIAL_DATA.length > 0) {
         await addDoc(collRef, INITIAL_DATA[0]);
         alert("เพิ่มข้อมูลตัวอย่างสำเร็จ!");
@@ -760,7 +759,6 @@ export default function App() {
         alert("ไม่มีข้อมูลเริ่มต้นสำหรับเพิ่ม");
       }
     } catch(e) { 
-      // หากเกิด Error ตรงนี้ ข้อความ Error จะปรากฏใน alert
       console.error("Error adding seed data:", e);
       alert(`ไม่สามารถเพิ่มข้อมูลตัวอย่างได้: ${e.message}`);
     } 
@@ -779,8 +777,10 @@ export default function App() {
             
             {/* ** ส่วนที่เพิ่ม ExportButton และปุ่ม Admin Toggle ** */}
             <div className="flex items-center gap-2">
-                {/* ExportButton ถูกส่ง drugs ทั้งหมดที่โหลดมา (allDrugsForExport) */}
-                <ActualExportButton data={allDrugsForExport} filename="Yommarat_Drug_List" /> 
+                {/* 🔴 แสดงปุ่ม Export เมื่อ isAdmin เป็น true เท่านั้น */}
+                {isAdmin && (
+                    <ActualExportButton data={allDrugsForExport} filename="Yommarat_Drug_List" /> 
+                )}
                 
                 <button onClick={handleAdminToggle} className={`p-2 rounded-full transition-colors ${isAdmin ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`} title={isAdmin ? "ออกจากโหมดผู้ดูแล" : "เข้าสู่โหมดผู้ดูแล"}>{isAdmin ? <Unlock size={20}/> : <Lock size={20}/>}</button>
             </div>
