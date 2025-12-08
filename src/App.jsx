@@ -1,9 +1,10 @@
-// --- FULL CODE with Load More Counter Feature ---
+// --- FULL CODE: Firebase Storage Support (Large Files) + Staff Login + Fixes (Complete) ---
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare, Download, User, LogOut } from 'lucide-react';
+import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, User } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, limit, orderBy, where, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 import { DRUG_GROUPS } from './Form';
 import ExportButton from './ExportButton';
@@ -13,7 +14,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyD8vn9ipMGLVGPuLqKZg6_599Rhv1-Y-24",
   authDomain: "drug-database-yom-c18f5.firebaseapp.com",
   projectId: "drug-database-yom-c18f5",
-  storageBucket: "drug-database-yom-c18f5.firebasestorage.app",
+  storageBucket: "drug-database-yom-c18f5.firebasestorage.app", // ✅ Bucket ที่ถูกต้อง
   messagingSenderId: "949962071846",
   appId: "1:949962071846:web:69ca662e47233920f6abe7",
   measurementId: "G-6MN9T3MV6B"
@@ -22,46 +23,23 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 // --- Helper Functions ---
 const getDisplayImageUrl = (url) => {
   if (!url || typeof url !== 'string') return "";
   if (url.startsWith('data:')) return url;
+  if (url.includes('firebasestorage')) return url;
   try {
     if (url.includes('drive.google.com')) {
       let id = null;
       const match1 = url.match(/\/d\/([^/?]+)/);
       if (match1) id = match1[1];
-      if (!id) {
-        const match2 = url.match(/[?&]id=([^&]+)/);
-        if (match2) id = match2[1];
-      }
-      if (id) {
-        return `https://drive.google.com/thumbnail?id=${id}&sz=w1000`; 
-      }
+      if (!id) { const match2 = url.match(/[?&]id=([^&]+)/); if (match2) id = match2[1]; }
+      if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w1000`; 
     }
-  } catch (e) {
-    console.error("Error parsing URL", e);
-    return url;
-  }
+  } catch (e) { console.error("Error parsing URL", e); }
   return url;
-};
-
-const base64ToBlob = (base64, type = 'application/pdf') => {
-  try {
-    const parts = base64.split(',');
-    if (parts.length < 2) return null;
-    const binStr = atob(parts[1]);
-    const len = binStr.length;
-    const arr = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      arr[i] = binStr.charCodeAt(i);
-    }
-    return new Blob([arr], { type: type });
-  } catch (e) {
-    console.error("Blob error", e);
-    return null;
-  }
 };
 
 const formatDate = (timestamp) => {
@@ -75,7 +53,7 @@ const MediaDisplay = ({ src, alt, className, isPdf }) => {
   const [hasError, setHasError] = useState(false);
   useEffect(() => { setHasError(false); }, [src]);
   if (!src) return (<div className={`bg-slate-100 flex flex-col items-center justify-center text-slate-400 border border-slate-200 ${className}`}><ImageIcon size={32} className="mb-2 opacity-50"/><span className="text-xs text-center px-2">ไม่มีข้อมูล</span></div>);
-  if (isPdf || (src.startsWith('data:application/pdf'))) return (<div className={`bg-slate-100 relative flex flex-col items-center justify-center text-slate-500 border border-slate-200 ${className}`}><FileIcon size={40} className="text-red-500 mb-2"/><span className="text-xs font-medium">เอกสาร PDF</span></div>);
+  if (isPdf || src.includes('.pdf') || src.startsWith('data:application/pdf')) return (<div className={`bg-slate-100 relative flex flex-col items-center justify-center text-slate-500 border border-slate-200 ${className}`}><FileIcon size={40} className="text-red-500 mb-2"/><span className="text-xs font-medium">เอกสาร PDF</span></div>);
   if (hasError) return (<div className={`bg-slate-100 flex flex-col items-center justify-center text-slate-400 border border-slate-200 ${className}`}><AlertCircle size={32} className="text-red-400 mb-2"/><span className="text-xs text-center px-2 text-red-500 font-medium">โหลดรูปไม่ได้</span></div>);
   return <img src={src} alt={alt} className={className} onError={() => setHasError(true)} referrerPolicy="no-referrer" />;
 };
@@ -100,22 +78,25 @@ const MultiSelect = ({ label, options, value = [], onChange }) => {
   );
 };
 
-const FileUploader = ({ label, onFileSelect, previewUrl, initialUrl, maxSizeKB = 700 }) => {
+const FileUploader = ({ label, onFileSelect, previewUrl, initialUrl, maxSizeKB = 5000 }) => {
   const fileInputRef = useRef(null);
   const [error, setError] = useState("");
   const handleFileChange = (e) => {
     const file = e.target.files[0]; if (!file) return;
     const maxSize = maxSizeKB * 1024; 
-    if (file.size > maxSize) { setError(`ไฟล์มีขนาดใหญ่เกินไป (ต้องไม่เกิน ${maxSizeKB}KB)`); return; }
-    const reader = new FileReader(); reader.onloadend = () => { onFileSelect(reader.result); setError(""); }; reader.onerror = () => { setError("อ่านไฟล์ไม่สำเร็จ"); }; reader.readAsDataURL(file);
+    if (file.size > maxSize) { setError(`ไฟล์ใหญ่เกินไป (ต้องไม่เกิน ${maxSizeKB/1024} MB)`); return; }
+    const reader = new FileReader();
+    reader.onloadend = () => { onFileSelect(reader.result, file); setError(""); };
+    reader.onerror = () => { setError("อ่านไฟล์ไม่สำเร็จ"); };
+    reader.readAsDataURL(file);
   };
-  const isPdf = previewUrl?.startsWith('data:application/pdf') || initialUrl?.includes('.pdf');
+  const isPdf = previewUrl?.startsWith('data:application/pdf') || initialUrl?.includes('.pdf') || initialUrl?.includes('alt=media');
   return (
     <div className="col-span-2">
-      <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">{label} <span className="text-xs text-slate-400 font-normal">(PNG, JPG, PDF &lt; {maxSizeKB}KB)</span></label>
+      <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">{label} <span className="text-xs text-slate-400 font-normal">(รองรับไฟล์สูงสุด {maxSizeKB/1024} MB)</span></label>
       <div className="flex gap-3 items-start">
         <div className="flex-1"><div onClick={() => fileInputRef.current?.click()} className="w-full p-3 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center gap-2 text-slate-500"><UploadCloud size={20} /><span className="text-sm">คลิกเพื่อเลือกไฟล์</span></div><input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg, application/pdf" className="hidden" />{error && <p className="text-red-500 text-xs mt-1">{error}</p>}</div>
-        <div className="w-20 h-20 shrink-0 border rounded-lg overflow-hidden bg-white relative shadow-sm"><MediaDisplay src={previewUrl || initialUrl} className="w-full h-full object-cover" isPdf={isPdf} />{(previewUrl || initialUrl) && (<button onClick={() => onFileSelect("")} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl shadow-sm hover:bg-red-600" title="ลบรูป"><X size={12} /></button>)}</div>
+        <div className="w-20 h-20 shrink-0 border rounded-lg overflow-hidden bg-white relative shadow-sm"><MediaDisplay src={previewUrl || initialUrl} className="w-full h-full object-cover" isPdf={isPdf} />{(previewUrl || initialUrl) && (<button onClick={() => onFileSelect("", null)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl shadow-sm hover:bg-red-600" title="ลบรูป"><X size={12} /></button>)}</div>
       </div>
     </div>
   );
@@ -145,13 +126,47 @@ const DrugCard = ({ drug, onClick }) => (
 
 const DrugFormModal = ({ initialData, onClose, onSave }) => {
   const [formData, setFormData] = useState({
-    genericName: initialData?.genericName || "", brandName: initialData?.brandName || "", manufacturer: initialData?.manufacturer || "", dosage: initialData?.dosage || "", category: initialData?.category || "ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]", nlemMain: initialData?.nlemMain || "", nlemSub: initialData?.nlemSub || "", prescriber: initialData?.prescriber || "", usageType: initialData?.usageType || "", administration: initialData?.administration || "", diluent: initialData?.diluent || "", stability: initialData?.stability || "", note: initialData?.note || "", reimbursement: initialData?.reimbursement || [], image: initialData?.image || "", leaflet: initialData?.leaflet || "", relatedDocument: initialData?.relatedDocument || "", type: initialData?.type || "injection", id: initialData?.id || null
+    genericName: initialData?.genericName || "", brandName: initialData?.brandName || "", manufacturer: initialData?.manufacturer || "", dosage: initialData?.dosage || "", category: initialData?.category || "ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]", nlemMain: initialData?.nlemMain || "", nlemSub: initialData?.nlemSub || "", prescriber: initialData?.prescriber || "", usageType: initialData?.usageType || "", administration: initialData?.administration || "", diluent: initialData?.diluent || "", stability: initialData?.stability || "", note: initialData?.note || "", reimbursement: initialData?.reimbursement || [], 
+    image: initialData?.image || "", leaflet: initialData?.leaflet || "", relatedDocument: initialData?.relatedDocument || "", 
+    type: initialData?.type || "injection", id: initialData?.id || null
   });
+  const [rawFiles, setRawFiles] = useState({ image: null, leaflet: null, relatedDocument: null });
+  const [isUploading, setIsUploading] = useState(false);
   const [availableSubGroups, setAvailableSubGroups] = useState([]);
+
   useEffect(() => { if (formData.nlemMain) { const groupData = DRUG_GROUPS.find(g => g.group === formData.nlemMain); setAvailableSubGroups(groupData ? groupData.subgroups : []); } }, [formData.nlemMain]);
   const reimbursementOptions = ["โครงการสวัสดิการ ขรก.", "ประกันสังคม", "บัตรทอง", "ชำระเงินเอง", "โครงการสวัสดิการ อปท.", "ทุกสิทธิการรักษา"];
+  
   const handleChange = (e) => { const { name, value } = e.target; setFormData(prev => ({ ...prev, [name]: value })); };
   const handleMainGroupChange = (e) => { const val = e.target.value; const groupData = DRUG_GROUPS.find(g => g.group === val); setAvailableSubGroups(groupData ? groupData.subgroups : []); setFormData(prev => ({ ...prev, nlemMain: val, nlemSub: "" })); };
+  
+  const handleFileSelect = (field, base64, file) => {
+    setFormData(prev => ({ ...prev, [field]: base64 })); 
+    setRawFiles(prev => ({ ...prev, [field]: file }));
+  };
+
+  const uploadToStorage = async (file, path) => {
+    if (!file) return null;
+    const storageRef = ref(storage, `drugs/${path}-${Date.now()}-${file.name}`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+  };
+
+  const handleSaveWrapper = async () => {
+    setIsUploading(true);
+    try {
+        let updatedData = { ...formData };
+        if (rawFiles.image) updatedData.image = await uploadToStorage(rawFiles.image, 'product');
+        if (rawFiles.leaflet) updatedData.leaflet = await uploadToStorage(rawFiles.leaflet, 'leaflet');
+        if (rawFiles.relatedDocument) updatedData.relatedDocument = await uploadToStorage(rawFiles.relatedDocument, 'related');
+        onSave(updatedData);
+    } catch (e) {
+        console.error("Upload failed", e);
+        alert("อัปโหลดไฟล์ไม่สำเร็จ: " + e.message);
+        setIsUploading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -172,11 +187,11 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
              {formData.type === 'injection' && (<div className="col-span-2 bg-rose-50 p-3 rounded-lg border border-rose-100 mt-2"><p className="text-rose-700 text-sm font-bold mb-2">ข้อมูลสำหรับยาฉีด</p><label className="block text-sm font-medium text-slate-700 mb-1">สารละลายที่ใช้</label><textarea name="diluent" rows="2" value={formData.diluent} onChange={handleChange} className="w-full p-2 border rounded-lg bg-white mb-2 resize-y" /><label className="block text-sm font-medium text-slate-700 mb-1">ความคงตัว</label><textarea name="stability" rows="2" value={formData.stability} onChange={handleChange} className="w-full p-2 border rounded-lg bg-white resize-y mb-2"/><label className="block text-sm font-medium text-slate-700 mb-1">วิธีการบริหาร</label><textarea name="administration" rows="2" value={formData.administration} onChange={handleChange} className="w-full p-2 border rounded-lg bg-white resize-y" placeholder="เช่น รับประทานหลังอาหาร, IV drip 30 นาที..."/></div>)}
              <div className="col-span-2 mt-4"><label className="block text-sm font-bold text-orange-600 mb-1 flex items-center gap-1"><Info size={16}/> หมายเหตุเพิ่มเติม</label><textarea name="note" rows="2" value={formData.note || ""} onChange={handleChange} className="w-full p-2 border rounded-lg bg-orange-50 focus:bg-white transition-colors resize-y border-orange-200 focus:border-orange-400" placeholder="ระบุข้อมูลเพิ่มเติม หรือข้อควรระวัง (ถ้ามี)..." /></div>
              <div className="col-span-2"><hr className="my-2"/></div>
-             <FileUploader label="รูปผลิตภัณฑ์" initialUrl={getDisplayImageUrl(formData.image)} previewUrl={formData.image} onFileSelect={(base64) => setFormData(prev => ({...prev, image: base64}))} maxSizeKB={400}/>
-             <FileUploader label="เอกสารกำกับยา (Leaflet)" initialUrl={getDisplayImageUrl(formData.leaflet)} previewUrl={formData.leaflet} onFileSelect={(base64) => setFormData(prev => ({...prev, leaflet: base64}))} maxSizeKB={600}/>
-             <FileUploader label="เอกสารที่เกี่ยวข้อง" initialUrl={getDisplayImageUrl(formData.relatedDocument)} previewUrl={formData.relatedDocument} onFileSelect={(base64) => setFormData(prev => ({...prev, relatedDocument: base64}))} maxSizeKB={300} />
+             <FileUploader label="รูปผลิตภัณฑ์" initialUrl={getDisplayImageUrl(formData.image)} previewUrl={formData.image} onFileSelect={(base64, file) => handleFileSelect('image', base64, file)} maxSizeKB={5000}/>
+             <FileUploader label="เอกสารกำกับยา (Leaflet)" initialUrl={getDisplayImageUrl(formData.leaflet)} previewUrl={formData.leaflet} onFileSelect={(base64, file) => handleFileSelect('leaflet', base64, file)} maxSizeKB={5000}/>
+             <FileUploader label="เอกสารที่เกี่ยวข้อง" initialUrl={getDisplayImageUrl(formData.relatedDocument)} previewUrl={formData.relatedDocument} onFileSelect={(base64, file) => handleFileSelect('relatedDocument', base64, file)} maxSizeKB={5000} />
           </div>
-          <button onClick={() => onSave(formData)} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 mt-4"><Save size={20} /> บันทึกข้อมูล</button>
+          <button onClick={handleSaveWrapper} disabled={isUploading} className={`w-full py-3 text-white rounded-lg font-bold flex items-center justify-center gap-2 mt-4 ${isUploading ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'}`}>{isUploading ? "กำลังอัปโหลด..." : <><Save size={20} /> บันทึกข้อมูล</>}</button>
         </div>
       </div>
     </div>
@@ -189,7 +204,7 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const displayRelatedDoc = getDisplayImageUrl(drug.relatedDocument); 
   const InfoItem = ({ icon, label, value }) => (<div><div className="flex items-center gap-1 text-slate-500 text-xs mb-1">{icon} {label}</div><div className="font-medium text-slate-800">{value || "-"}</div></div>);
   const Row = ({ label, value }) => (<div className="flex justify-between items-start text-sm"><span className="text-slate-500 min-w-[100px] shrink-0">{label}:</span><span className="text-slate-800 font-medium text-right flex-1 whitespace-pre-wrap">{value || "-"}</span></div>);
-  const handleOpenFile = (src) => { if (!src) return; let urlToOpen = src; if (src.startsWith('data:application/pdf')) { const blob = base64ToBlob(src); if (blob) urlToOpen = URL.createObjectURL(blob); } window.open(urlToOpen, '_blank'); };
+  const handleOpenFile = (src) => { if (!src) return; window.open(src, '_blank'); };
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -230,9 +245,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [drugs, setDrugs] = useState([]);
   const [allDrugsForExport, setAllDrugsForExport] = useState([]);
-  // ✅ 1. เพิ่ม State สำหรับนับจำนวนทั้งหมด
   const [totalCount, setTotalCount] = useState(0); 
-
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
@@ -260,7 +273,6 @@ export default function App() {
     try {
         const drugsRef = collection(db, 'drugs');
         const q = query(drugsRef, orderBy('genericName'));
-
         const unsubscribe = onSnapshot(q, (snapshot) => {
           let allDrugs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setAllDrugsForExport(allDrugs); 
@@ -277,9 +289,7 @@ export default function App() {
           if (nlemMainFilter !== 'all') filteredDrugs = filteredDrugs.filter(drug => drug.nlemMain === nlemMainFilter);
           if (nlemSubFilter !== 'all') filteredDrugs = filteredDrugs.filter(drug => drug.nlemSub === nlemSubFilter);
           
-          // ✅ 2. อัปเดตจำนวนรายการทั้งหมดที่ค้นพบ (ก่อนตัดหน้า)
           setTotalCount(filteredDrugs.length);
-
           const visibleList = filteredDrugs.slice(0, visibleCount);
           setDrugs(visibleList); 
           setLoading(false);
@@ -290,11 +300,7 @@ export default function App() {
           if (error.code === 'permission-denied') setPermissionError(true);
         });
         return () => unsubscribe();
-    } catch(e) {
-        console.error("Error setting up Firestore listener:", e);
-        setLoading(false);
-        setPermissionError(true);
-    }
+    } catch(e) { console.error("Firestore init error:", e); setLoading(false); setPermissionError(true); }
   }, [user, searchTerm, visibleCount, filterType, nlemMainFilter, nlemSubFilter]);
 
   const handleAdminToggle = () => { if (isAdmin) { setIsAdmin(false); } else { setIsLoginModalOpen(true); } };
@@ -348,25 +354,13 @@ export default function App() {
         {loading ? (<div className="text-center mt-10 text-slate-500 animate-pulse">กำลังโหลดข้อมูล...</div>) : drugs.length > 0 ? (
            <>
               {drugs.map(drug => (<DrugCard key={drug.id} drug={drug} onClick={setSelectedDrug} />))}
-              
-              {/* ✅ 3. ส่วน Load More พร้อม Counter */}
               {drugs.length < totalCount && (
                 <div className="mt-6 text-center pb-8">
-                  <p className="text-sm text-slate-500 mb-2 font-medium">
-                    แสดง {drugs.length} จาก {totalCount} รายการ
-                  </p>
-                  <button onClick={() => setVisibleCount(prev => prev + 10)} className="bg-slate-200 text-slate-600 px-6 py-2 rounded-full hover:bg-slate-300 transition-colors text-sm font-bold shadow-sm">
-                    โหลดเพิ่มเติม...
-                  </button>
+                  <p className="text-sm text-slate-500 mb-2 font-medium">แสดง {drugs.length} จาก {totalCount} รายการ</p>
+                  <button onClick={() => setVisibleCount(prev => prev + 10)} className="bg-slate-200 text-slate-600 px-6 py-2 rounded-full hover:bg-slate-300 transition-colors text-sm font-bold shadow-sm">โหลดเพิ่มเติม...</button>
                 </div>
               )}
-
-              {/* แสดงข้อความเมื่อโหลดครบแล้ว (Optional) */}
-              {drugs.length >= totalCount && drugs.length > 5 && (
-                 <div className="mt-6 text-center pb-8 text-slate-400 text-xs">
-                    แสดงครบทั้งหมด {totalCount} รายการ
-                 </div>
-              )}
+              {drugs.length >= totalCount && drugs.length > 5 && (<div className="mt-6 text-center pb-8 text-slate-400 text-xs">แสดงครบทั้งหมด {totalCount} รายการ</div>)}
            </>
         ) : (<div className="text-center text-slate-400 mt-10 flex flex-col items-center gap-3"><Pill size={48} className="opacity-20" /><p>ไม่พบข้อมูลยา</p>{drugs.length === 0 && isAdmin && (<button onClick={handleAddSeedData} className="text-blue-500 text-sm hover:underline">+ เพิ่มข้อมูลตัวอย่าง</button>)}</div>)}
       </main>
