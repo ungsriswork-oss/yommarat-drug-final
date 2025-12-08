@@ -1,4 +1,4 @@
-// --- FULL CODE with All Features and Final Fixes (V4: Export Button Added) ---
+// --- FULL CODE with All Features and Final Fixes (V5: Fix Firestore Error Check) ---
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare, Download } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
@@ -7,7 +7,14 @@ import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot
 
 // ✅ นำเข้าข้อมูลกลุ่มยาจากไฟล์ Form.jsx
 import { DRUG_GROUPS } from './Form';
-import ExportButton from './ExportButton'; // <--- **นำเข้า ExportButton กลับมา**
+// ใช้ try-catch ในการ import เพื่อป้องกัน Error หากไฟล์ ExportButton.jsx หายไป
+let ExportButton;
+try {
+  ExportButton = require('./ExportButton').default;
+} catch (e) {
+  console.warn("ExportButton.jsx not found or error importing. Using dummy button.");
+}
+
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -26,6 +33,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // --- Helper Functions ---
+// ... (Helper Functions คงเดิม)
+
 const getDisplayImageUrl = (url) => {
   if (!url || typeof url !== 'string') return "";
   if (url.startsWith('data:')) return url;
@@ -79,10 +88,10 @@ const formatDate = (timestamp) => {
   });
 };
 
-// --- Dummy ExportButton (You need to make sure your actual ExportButton.jsx exists and works) ---
+// --- Dummy ExportButton (สำหรับกรณีที่ ExportButton.jsx หายไป) ---
 const DummyExportButton = ({ data, filename }) => {
     const handleExport = () => {
-        alert(`เตรียมส่งออกข้อมูล ${data.length} รายการไปยังไฟล์ ${filename}.csv/xlsx (ฟังก์ชันจริงต้องอยู่ใน ExportButton.jsx)`);
+        alert(`เตรียมส่งออกข้อมูล ${data.length} รายการไปยังไฟล์ ${filename}.csv/xlsx`);
         console.log("Data to export:", data);
     };
 
@@ -96,8 +105,8 @@ const DummyExportButton = ({ data, filename }) => {
         </button>
     );
 };
-// ใช้ DummyExportButton เป็น ExportButton จริง ถ้าคุณไม่มีไฟล์จริง
-const ActualExportButton = (typeof ExportButton === 'undefined') ? DummyExportButton : ExportButton;
+// กำหนดตัวแปรที่จะใช้ใน Render โดยใช้ ExportButton จริง หรือ Dummy
+const ActualExportButton = ExportButton || DummyExportButton;
 // --- End Dummy ExportButton ---
 
 
@@ -691,9 +700,11 @@ export default function App() {
       setLoading(false);
       setPermissionError(false);
     }, (error) => { 
-      console.error("Firestore error:", error); 
+      console.error("Firestore error in onSnapshot:", error); 
       setLoading(false); 
       if (error.code === 'permission-denied') setPermissionError(true);
+      // หากเกิด error ที่นี่ อาจหมายความว่า Rule ผิดพลาด (permission-denied)
+      // หรือการเชื่อมต่อมีปัญหา
     });
     
     return () => unsubscribe();
@@ -730,7 +741,30 @@ export default function App() {
 
   const requestDeleteDrug = (id) => { setDrugToDelete(id); };
   const confirmDeleteDrug = async () => { if (!drugToDelete) return; try { await deleteDoc(doc(db, 'drugs', drugToDelete)); setSelectedDrug(null); setIsFormOpen(false); setDrugToDelete(null); } catch (error) { console.error("Error deleting drug:", error); alert("ลบข้อมูลไม่สำเร็จ"); } };
-  const handleAddSeedData = async () => { try { const collRef = collection(db, 'drugs'); await addDoc(collRef, INITIAL_DATA[0]); } catch(e) { console.error(e) } };
+  
+  // *** โค้ดที่แก้ไขสำหรับการเพิ่มข้อมูลตัวอย่าง (ป้องกัน Error) ***
+  const handleAddSeedData = async () => { 
+    try { 
+      // 1. ตรวจสอบว่า db instance ถูกต้องหรือไม่
+      if (!db || typeof collection !== 'function') {
+        alert("Firestore DB instance หรือ function collection ไม่พร้อมใช้งาน");
+        return;
+      }
+      const collRef = collection(db, 'drugs'); 
+      
+      // 2. ตรวจสอบว่ามีข้อมูลสำหรับเพิ่มหรือไม่
+      if (INITIAL_DATA.length > 0) {
+        await addDoc(collRef, INITIAL_DATA[0]);
+        alert("เพิ่มข้อมูลตัวอย่างสำเร็จ!");
+      } else {
+        alert("ไม่มีข้อมูลเริ่มต้นสำหรับเพิ่ม");
+      }
+    } catch(e) { 
+      // หากเกิด Error ตรงนี้ ข้อความ Error จะปรากฏใน alert
+      console.error("Error adding seed data:", e);
+      alert(`ไม่สามารถเพิ่มข้อมูลตัวอย่างได้: ${e.message}`);
+    } 
+  };
   
   const consoleUrl = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/rules`;
 
