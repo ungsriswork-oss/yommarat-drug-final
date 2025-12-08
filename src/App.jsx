@@ -1,10 +1,11 @@
-// --- FULL CODE: Custom File Size Limits (0.3MB & 1.5MB) ---
+// --- FULL CODE: Auto-Delete Files + Resize Limits (FINAL VERSION) ---
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, User } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+// 1. เพิ่ม deleteObject เพื่อสั่งลบไฟล์
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 import { DRUG_GROUPS } from './Form';
 import ExportButton from './ExportButton';
@@ -14,7 +15,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyD8vn9ipMGLVGPuLqKZg6_599Rhv1-Y-24",
   authDomain: "drug-database-yom-c18f5.firebaseapp.com",
   projectId: "drug-database-yom-c18f5",
-  storageBucket: "drug-database-yom-c18f5.firebasestorage.app", // ✅ Bucket ของคุณ
+  storageBucket: "drug-database-yom-c18f5.firebasestorage.app", // ✅ Bucket
   messagingSenderId: "949962071846",
   appId: "1:949962071846:web:69ca662e47233920f6abe7",
   measurementId: "G-6MN9T3MV6B"
@@ -78,43 +79,26 @@ const MultiSelect = ({ label, options, value = [], onChange }) => {
   );
 };
 
-// 3. FileUploader (Updated Logic for KB/MB display)
 const FileUploader = ({ label, onFileSelect, previewUrl, initialUrl, maxSizeKB }) => {
   const fileInputRef = useRef(null);
   const [error, setError] = useState("");
-  
-  // คำนวณข้อความแสดงขนาดไฟล์ให้สวยงาม
-  const displaySizeLimit = maxSizeKB >= 1024 
-    ? `${(maxSizeKB / 1024).toFixed(1)} MB` 
-    : `${maxSizeKB} KB`;
-
+  const displaySizeLimit = maxSizeKB >= 1024 ? `${(maxSizeKB / 1024).toFixed(1)} MB` : `${maxSizeKB} KB`;
   const handleFileChange = (e) => {
     const file = e.target.files[0]; if (!file) return;
-    const maxSize = maxSizeKB * 1024; // KB -> Bytes
-    
-    if (file.size > maxSize) { 
-      setError(`ไฟล์ใหญ่เกินไป (ต้องไม่เกิน ${displaySizeLimit})`); 
-      return; 
-    }
-    
+    const maxSize = maxSizeKB * 1024;
+    if (file.size > maxSize) { setError(`ไฟล์ใหญ่เกินไป (ต้องไม่เกิน ${displaySizeLimit})`); return; }
     const reader = new FileReader();
     reader.onloadend = () => { onFileSelect(reader.result, file); setError(""); };
     reader.onerror = () => { setError("อ่านไฟล์ไม่สำเร็จ"); };
     reader.readAsDataURL(file);
   };
-
   const isPdf = previewUrl?.startsWith('data:application/pdf') || initialUrl?.includes('.pdf') || initialUrl?.includes('alt=media');
-  
   return (
     <div className="col-span-2">
-      <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
-        {label} <span className="text-xs text-slate-400 font-normal">(สูงสุด {displaySizeLimit})</span>
-      </label>
+      <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">{label} <span className="text-xs text-slate-400 font-normal">(สูงสุด {displaySizeLimit})</span></label>
       <div className="flex gap-3 items-start">
         <div className="flex-1">
-          <div onClick={() => fileInputRef.current?.click()} className="w-full p-3 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center gap-2 text-slate-500">
-            <UploadCloud size={20} /><span className="text-sm">คลิกเพื่อเลือกไฟล์</span>
-          </div>
+          <div onClick={() => fileInputRef.current?.click()} className="w-full p-3 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center gap-2 text-slate-500"><UploadCloud size={20} /><span className="text-sm">คลิกเพื่อเลือกไฟล์</span></div>
           <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg, application/pdf" className="hidden" />
           {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
         </div>
@@ -161,14 +145,9 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
 
   useEffect(() => { if (formData.nlemMain) { const groupData = DRUG_GROUPS.find(g => g.group === formData.nlemMain); setAvailableSubGroups(groupData ? groupData.subgroups : []); } }, [formData.nlemMain]);
   const reimbursementOptions = ["โครงการสวัสดิการ ขรก.", "ประกันสังคม", "บัตรทอง", "ชำระเงินเอง", "โครงการสวัสดิการ อปท.", "ทุกสิทธิการรักษา"];
-  
   const handleChange = (e) => { const { name, value } = e.target; setFormData(prev => ({ ...prev, [name]: value })); };
   const handleMainGroupChange = (e) => { const val = e.target.value; const groupData = DRUG_GROUPS.find(g => g.group === val); setAvailableSubGroups(groupData ? groupData.subgroups : []); setFormData(prev => ({ ...prev, nlemMain: val, nlemSub: "" })); };
-  
-  const handleFileSelect = (field, base64, file) => {
-    setFormData(prev => ({ ...prev, [field]: base64 })); 
-    setRawFiles(prev => ({ ...prev, [field]: file }));
-  };
+  const handleFileSelect = (field, base64, file) => { setFormData(prev => ({ ...prev, [field]: base64 })); setRawFiles(prev => ({ ...prev, [field]: file })); };
 
   const uploadToStorage = async (file, path) => {
     if (!file) return null;
@@ -185,11 +164,7 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
         if (rawFiles.leaflet) updatedData.leaflet = await uploadToStorage(rawFiles.leaflet, 'leaflet');
         if (rawFiles.relatedDocument) updatedData.relatedDocument = await uploadToStorage(rawFiles.relatedDocument, 'related');
         onSave(updatedData);
-    } catch (e) {
-        console.error("Upload failed", e);
-        alert("อัปโหลดไฟล์ไม่สำเร็จ: " + e.message);
-        setIsUploading(false);
-    }
+    } catch (e) { console.error("Upload failed", e); alert("อัปโหลดไฟล์ไม่สำเร็จ: " + e.message); setIsUploading(false); }
   };
 
   return (
@@ -213,32 +188,14 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
              <div className="col-span-2 mt-4"><label className="block text-sm font-bold text-orange-600 mb-1 flex items-center gap-1"><Info size={16}/> หมายเหตุเพิ่มเติม</label><textarea name="note" rows="2" value={formData.note || ""} onChange={handleChange} className="w-full p-2 border rounded-lg bg-orange-50 focus:bg-white transition-colors resize-y border-orange-200 focus:border-orange-400" placeholder="ระบุข้อมูลเพิ่มเติม หรือข้อควรระวัง (ถ้ามี)..." /></div>
              <div className="col-span-2"><hr className="my-2"/></div>
              
-             {/* ✅ 1. รูปผลิตภัณฑ์: 300 KB */}
-             <FileUploader 
-               label="รูปผลิตภัณฑ์" 
-               initialUrl={getDisplayImageUrl(formData.image)} 
-               previewUrl={formData.image} 
-               onFileSelect={(base64, file) => handleFileSelect('image', base64, file)} 
-               maxSizeKB={300} 
-             />
+             {/* ✅ 1. รูปผลิตภัณฑ์: 0.5 MB */}
+             <FileUploader label="รูปผลิตภัณฑ์" initialUrl={getDisplayImageUrl(formData.image)} previewUrl={formData.image} onFileSelect={(base64, file) => handleFileSelect('image', base64, file)} maxSizeKB={500} />
              
-             {/* ✅ 2. เอกสารกำกับยา: 1.5 MB (1500 KB) */}
-             <FileUploader 
-               label="เอกสารกำกับยา (Leaflet)" 
-               initialUrl={getDisplayImageUrl(formData.leaflet)} 
-               previewUrl={formData.leaflet} 
-               onFileSelect={(base64, file) => handleFileSelect('leaflet', base64, file)} 
-               maxSizeKB={1500}
-             />
+             {/* ✅ 2. เอกสารกำกับยา: 3 MB */}
+             <FileUploader label="เอกสารกำกับยา (Leaflet)" initialUrl={getDisplayImageUrl(formData.leaflet)} previewUrl={formData.leaflet} onFileSelect={(base64, file) => handleFileSelect('leaflet', base64, file)} maxSizeKB={3000} />
 
-             {/* ✅ 3. เอกสารที่เกี่ยวข้อง: 1.5 MB (1500 KB) */}
-             <FileUploader 
-               label="เอกสารที่เกี่ยวข้อง" 
-               initialUrl={getDisplayImageUrl(formData.relatedDocument)} 
-               previewUrl={formData.relatedDocument} 
-               onFileSelect={(base64, file) => handleFileSelect('relatedDocument', base64, file)} 
-               maxSizeKB={1500} 
-             />
+             {/* ✅ 3. เอกสารที่เกี่ยวข้อง: 5 MB */}
+             <FileUploader label="เอกสารที่เกี่ยวข้อง" initialUrl={getDisplayImageUrl(formData.relatedDocument)} previewUrl={formData.relatedDocument} onFileSelect={(base64, file) => handleFileSelect('relatedDocument', base64, file)} maxSizeKB={5000} />
           </div>
           <button onClick={handleSaveWrapper} disabled={isUploading} className={`w-full py-3 text-white rounded-lg font-bold flex items-center justify-center gap-2 mt-4 ${isUploading ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'}`}>{isUploading ? "กำลังอัปโหลด..." : <><Save size={20} /> บันทึกข้อมูล</>}</button>
         </div>
@@ -337,44 +294,47 @@ export default function App() {
           if (filterType !== 'all') filteredDrugs = filteredDrugs.filter(drug => drug.type === filterType);
           if (nlemMainFilter !== 'all') filteredDrugs = filteredDrugs.filter(drug => drug.nlemMain === nlemMainFilter);
           if (nlemSubFilter !== 'all') filteredDrugs = filteredDrugs.filter(drug => drug.nlemSub === nlemSubFilter);
-          
           setTotalCount(filteredDrugs.length);
           const visibleList = filteredDrugs.slice(0, visibleCount);
           setDrugs(visibleList); 
           setLoading(false);
           setPermissionError(false);
-        }, (error) => { 
-          console.error("Firestore error:", error); 
-          setLoading(false); 
-          if (error.code === 'permission-denied') setPermissionError(true);
-        });
+        }, (error) => { console.error("Firestore error:", error); setLoading(false); if (error.code === 'permission-denied') setPermissionError(true); });
         return () => unsubscribe();
     } catch(e) { console.error("Firestore init error:", e); setLoading(false); setPermissionError(true); }
   }, [user, searchTerm, visibleCount, filterType, nlemMainFilter, nlemSubFilter]);
 
   const handleAdminToggle = () => { if (isAdmin) { setIsAdmin(false); } else { setIsLoginModalOpen(true); } };
-  
-  const handleSaveDrug = async (drugData) => { 
-    try { 
-      const collRef = collection(db, 'drugs'); 
-      const dataToSave = { ...drugData, lastUpdated: serverTimestamp(), updatedBy: "Admin" };
-      if (drugData.id) { 
-        const docRef = doc(db, 'drugs', drugData.id); 
-        const { id, ...dataToUpdate } = dataToSave; 
-        await updateDoc(docRef, dataToUpdate); 
-      } else { 
-        const { id, ...newData } = dataToSave;
-        await addDoc(collRef, newData); 
-      } 
-      setIsFormOpen(false); setSelectedDrug(null); setIsEditing(false); 
-    } catch (error) { 
-      console.error("Error saving drug:", error); 
-      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล"); 
-    } 
-  };
-
+  const handleSaveDrug = async (drugData) => { try { const collRef = collection(db, 'drugs'); const dataToSave = { ...drugData, lastUpdated: serverTimestamp(), updatedBy: "Admin" }; if (drugData.id) { const docRef = doc(db, 'drugs', drugData.id); const { id, ...dataToUpdate } = dataToSave; await updateDoc(docRef, dataToUpdate); } else { const { id, ...newData } = dataToSave; await addDoc(collRef, newData); } setIsFormOpen(false); setSelectedDrug(null); setIsEditing(false); } catch (error) { console.error("Error saving drug:", error); alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล"); } };
   const requestDeleteDrug = (id) => { setDrugToDelete(id); };
-  const confirmDeleteDrug = async () => { if (!drugToDelete) return; try { await deleteDoc(doc(db, 'drugs', drugToDelete)); setSelectedDrug(null); setIsFormOpen(false); setDrugToDelete(null); } catch (error) { console.error("Error deleting drug:", error); alert("ลบข้อมูลไม่สำเร็จ"); } };
+  
+  // ✅ ฟังก์ชันลบยา + ลบไฟล์อัตโนมัติ (Cleanup Logic)
+  const confirmDeleteDrug = async () => { 
+    if (!drugToDelete) return; 
+    try { 
+      // 1. หาข้อมูลยาที่จะลบก่อน เพื่อเอา URL ไฟล์มาลบ
+      const drug = drugs.find(d => d.id === drugToDelete);
+      if (drug) {
+         const deleteFile = async (url) => {
+            if (!url || !url.includes('firebasestorage')) return;
+            try {
+               const fileRef = ref(storage, url);
+               await deleteObject(fileRef);
+            } catch (err) { console.warn("ลบไฟล์ไม่สำเร็จ (อาจไม่มีไฟล์อยู่จริง):", err); }
+         };
+         // สั่งลบทั้ง 3 ไฟล์ (ถ้ามี)
+         await deleteFile(drug.image);
+         await deleteFile(drug.leaflet);
+         await deleteFile(drug.relatedDocument);
+      }
+
+      // 2. ลบข้อมูลจาก Database
+      await deleteDoc(doc(db, 'drugs', drugToDelete)); 
+      
+      setSelectedDrug(null); setIsFormOpen(false); setDrugToDelete(null); 
+    } catch (error) { console.error("Error deleting drug:", error); alert("ลบข้อมูลไม่สำเร็จ"); } 
+  };
+  
   const handleAddSeedData = async () => { try { if (!db) { alert("Firestore DB instance ไม่พร้อมใช้งาน"); return; } const collRef = collection(db, 'drugs'); if (INITIAL_DATA.length > 0) { await addDoc(collRef, INITIAL_DATA[0]); alert("เพิ่มข้อมูลตัวอย่างสำเร็จ!"); } else { alert("ไม่มีข้อมูลเริ่มต้นสำหรับเพิ่ม"); } } catch(e) { console.error("Error adding seed data:", e); alert(`ไม่สามารถเพิ่มข้อมูลตัวอย่างได้: ${e.message}`); } };
   const consoleUrl = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/rules`;
 
@@ -383,9 +343,7 @@ export default function App() {
       <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-10">
         <div className="max-w-md mx-auto">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-              <div className="bg-blue-600 text-white p-2 rounded-lg"><Pill size={20} /></div> Yommarat Drug List
-            </h1>
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><div className="bg-blue-600 text-white p-2 rounded-lg"><Pill size={20} /></div> Yommarat Drug List</h1>
             <div className="flex items-center gap-2">
                 {isAdmin && <ExportButton db={db} />}
                 <button onClick={handleAdminToggle} className={`flex items-center gap-2 px-3 py-2 rounded-full transition-all shadow-sm ${isAdmin ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`} title={isAdmin ? "ออกจากโหมดผู้ดูแล" : "สำหรับเจ้าหน้าที่เข้าสู่ระบบ"}>
@@ -403,12 +361,7 @@ export default function App() {
         {loading ? (<div className="text-center mt-10 text-slate-500 animate-pulse">กำลังโหลดข้อมูล...</div>) : drugs.length > 0 ? (
            <>
               {drugs.map(drug => (<DrugCard key={drug.id} drug={drug} onClick={setSelectedDrug} />))}
-              {drugs.length < totalCount && (
-                <div className="mt-6 text-center pb-8">
-                  <p className="text-sm text-slate-500 mb-2 font-medium">แสดง {drugs.length} จาก {totalCount} รายการ</p>
-                  <button onClick={() => setVisibleCount(prev => prev + 10)} className="bg-slate-200 text-slate-600 px-6 py-2 rounded-full hover:bg-slate-300 transition-colors text-sm font-bold shadow-sm">โหลดเพิ่มเติม...</button>
-                </div>
-              )}
+              {drugs.length < totalCount && (<div className="mt-6 text-center pb-8"><p className="text-sm text-slate-500 mb-2 font-medium">แสดง {drugs.length} จาก {totalCount} รายการ</p><button onClick={() => setVisibleCount(prev => prev + 10)} className="bg-slate-200 text-slate-600 px-6 py-2 rounded-full hover:bg-slate-300 transition-colors text-sm font-bold shadow-sm">โหลดเพิ่มเติม...</button></div>)}
               {drugs.length >= totalCount && drugs.length > 5 && (<div className="mt-6 text-center pb-8 text-slate-400 text-xs">แสดงครบทั้งหมด {totalCount} รายการ</div>)}
            </>
         ) : (<div className="text-center text-slate-400 mt-10 flex flex-col items-center gap-3"><Pill size={48} className="opacity-20" /><p>ไม่พบข้อมูลยา</p>{drugs.length === 0 && isAdmin && (<button onClick={handleAddSeedData} className="text-blue-500 text-sm hover:underline">+ เพิ่มข้อมูลตัวอย่าง</button>)}</div>)}
@@ -417,7 +370,7 @@ export default function App() {
       {selectedDrug && !isEditing && (<DetailModal drug={selectedDrug} onClose={() => setSelectedDrug(null)} onEdit={() => { setIsEditing(true); setIsFormOpen(true); }} onDelete={requestDeleteDrug} isAdmin={isAdmin} />)}
       {isFormOpen && isAdmin && (<DrugFormModal initialData={isEditing ? selectedDrug : null} onClose={() => { setIsFormOpen(false); setIsEditing(false); }} onSave={handleSaveDrug} />)}
       {isLoginModalOpen && (<AdminLoginModal onClose={() => setIsLoginModalOpen(false)} onLogin={() => setIsAdmin(true)} />)}
-      <ConfirmModal isOpen={!!drugToDelete} onClose={() => setDrugToDelete(null)} onConfirm={confirmDeleteDrug} title="ยืนยันการลบ" message="คุณแน่ใจหรือไม่ที่จะลบข้อมูลยานี้? การกระทำนี้ไม่สามารถย้อนกลับได้" />
+      <ConfirmModal isOpen={!!drugToDelete} onClose={() => setDrugToDelete(null)} onConfirm={confirmDeleteDrug} title="ยืนยันการลบ" message="คุณแน่ใจหรือไม่ที่จะลบข้อมูลยานี้? การกระทำนี้ไม่สามารถย้อนกลับได้ (ไฟล์เอกสารจะถูกลบด้วย)" />
     </div>
   );
 }
