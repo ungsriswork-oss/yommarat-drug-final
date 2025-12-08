@@ -1,13 +1,13 @@
-// --- FULL CODE with All Features and Final Fixes (V3: Related Doc button is BLUE) ---
+// --- FULL CODE with All Features and Final Fixes (V4: Export Button Added) ---
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare } from 'lucide-react';
+import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare, Download } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, limit, orderBy, where, serverTimestamp } from 'firebase/firestore';
 
 // ✅ นำเข้าข้อมูลกลุ่มยาจากไฟล์ Form.jsx
 import { DRUG_GROUPS } from './Form';
-// import ExportButton from './ExportButton'; 
+import ExportButton from './ExportButton'; // <--- **นำเข้า ExportButton กลับมา**
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -78,6 +78,28 @@ const formatDate = (timestamp) => {
     minute: '2-digit',
   });
 };
+
+// --- Dummy ExportButton (You need to make sure your actual ExportButton.jsx exists and works) ---
+const DummyExportButton = ({ data, filename }) => {
+    const handleExport = () => {
+        alert(`เตรียมส่งออกข้อมูล ${data.length} รายการไปยังไฟล์ ${filename}.csv/xlsx (ฟังก์ชันจริงต้องอยู่ใน ExportButton.jsx)`);
+        console.log("Data to export:", data);
+    };
+
+    return (
+        <button 
+            onClick={handleExport} 
+            className="p-2 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors" 
+            title="ส่งออกข้อมูลเป็น Excel"
+        >
+            <Download size={20} />
+        </button>
+    );
+};
+// ใช้ DummyExportButton เป็น ExportButton จริง ถ้าคุณไม่มีไฟล์จริง
+const ActualExportButton = (typeof ExportButton === 'undefined') ? DummyExportButton : ExportButton;
+// --- End Dummy ExportButton ---
+
 
 // --- Components ---
 const MediaDisplay = ({ src, alt, className, isPdf }) => {
@@ -574,7 +596,7 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
             {drug.type === 'injection' && (<div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Thermometer size={18} className="text-rose-500" /> การผสมและการเก็บรักษา</h3><div className="bg-rose-50 p-4 rounded-lg space-y-3 border border-rose-100"><Row label="สารละลายที่ใช้" value={drug.diluent} /><Row label="ความคงตัว" value={drug.stability} /><Row label="วิธีการบริหาร" value={drug.administration} /></div></div>)}
             {drug.note && (<div className="bg-orange-50 border border-orange-100 p-4 rounded-lg"><h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2 text-sm"><Info size={16} /> หมายเหตุเพิ่มเติม</h3><p className="text-slate-700 text-sm whitespace-pre-wrap">{drug.note}</p></div>)}
             
-            {/* ส่วนปุ่มดาวน์โหลดเอกสาร (แก้ไขที่นี่: ใช้สีน้ำเงินและเปลี่ยนข้อความ) */}
+            {/* ส่วนปุ่มดาวน์โหลดเอกสาร (ปุ่มสีน้ำเงิน 2 ปุ่ม) */}
             <div className="space-y-3 mt-4">
               {displayLeaflet && (
                 <button 
@@ -587,7 +609,6 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
               {drug.relatedDocument && (
                 <button 
                   onClick={() => handleOpenFile(displayRelatedDoc)} 
-                  // เปลี่ยนกลับเป็นสีน้ำเงินตามปุ่มด้านบน
                   className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"
                 >
                   <FileText size={20} /> ดูเอกสารที่เกี่ยวข้อง
@@ -607,6 +628,7 @@ const INITIAL_DATA = [{genericName: "Paracetamol", brandName: "Tylenol", manufac
 export default function App() {
   const [user, setUser] = useState(null);
   const [drugs, setDrugs] = useState([]);
+  const [allDrugsForExport, setAllDrugsForExport] = useState([]); // เก็บข้อมูลทั้งหมดสำหรับการ Export
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
@@ -636,10 +658,16 @@ export default function App() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       let allDrugs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // เก็บข้อมูลยา "ทั้งหมด" สำหรับ Export (ควรเก็บทั้งหมดก่อน Filter)
+      setAllDrugsForExport(allDrugs); 
+
+      // ทำการ Filter
+      let filteredDrugs = allDrugs;
 
       if (searchTerm.trim() !== "") {
         const lowerTerm = searchTerm.toLowerCase();
-        allDrugs = allDrugs.filter(drug => {
+        filteredDrugs = filteredDrugs.filter(drug => {
           const generic = drug.genericName ? drug.genericName.toLowerCase() : "";
           const brand = drug.brandName ? drug.brandName.toLowerCase() : "";
           return generic.includes(lowerTerm) || brand.includes(lowerTerm);
@@ -647,19 +675,19 @@ export default function App() {
       }
 
       if (filterType !== 'all') {
-        allDrugs = allDrugs.filter(drug => drug.type === filterType);
+        filteredDrugs = filteredDrugs.filter(drug => drug.type === filterType);
       }
       
       if (nlemMainFilter !== 'all') {
-        allDrugs = allDrugs.filter(drug => drug.nlemMain === nlemMainFilter);
+        filteredDrugs = filteredDrugs.filter(drug => drug.nlemMain === nlemMainFilter);
       }
 
       if (nlemSubFilter !== 'all') {
-        allDrugs = allDrugs.filter(drug => drug.nlemSub === nlemSubFilter);
+        filteredDrugs = filteredDrugs.filter(drug => drug.nlemSub === nlemSubFilter);
       }
       
-      const visibleList = allDrugs.slice(0, visibleCount);
-      setDrugs(visibleList);
+      const visibleList = filteredDrugs.slice(0, visibleCount);
+      setDrugs(visibleList); // แสดงเฉพาะส่วนที่ต้องแสดง
       setLoading(false);
       setPermissionError(false);
     }, (error) => { 
@@ -710,7 +738,19 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 font-sans relative">
       <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-10">
         <div className="max-w-md mx-auto">
-          <div className="flex justify-between items-center mb-4"><h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><div className="bg-blue-600 text-white p-2 rounded-lg"><Pill size={20} /></div> Yommarat Drug List</h1><button onClick={handleAdminToggle} className={`p-2 rounded-full transition-colors ${isAdmin ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`} title={isAdmin ? "ออกจากโหมดผู้ดูแล" : "เข้าสู่โหมดผู้ดูแล"}>{isAdmin ? <Unlock size={20}/> : <Lock size={20}/>}</button></div>
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+              <div className="bg-blue-600 text-white p-2 rounded-lg"><Pill size={20} /></div> Yommarat Drug List
+            </h1>
+            
+            {/* ** ส่วนที่เพิ่ม ExportButton และปุ่ม Admin Toggle ** */}
+            <div className="flex items-center gap-2">
+                {/* ExportButton ถูกส่ง drugs ทั้งหมดที่โหลดมา (allDrugsForExport) */}
+                <ActualExportButton data={allDrugsForExport} filename="Yommarat_Drug_List" /> 
+                
+                <button onClick={handleAdminToggle} className={`p-2 rounded-full transition-colors ${isAdmin ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`} title={isAdmin ? "ออกจากโหมดผู้ดูแล" : "เข้าสู่โหมดผู้ดูแล"}>{isAdmin ? <Unlock size={20}/> : <Lock size={20}/>}</button>
+            </div>
+          </div>
           <div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อยา, ยี่ห้อ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all outline-none" /></div>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setNlemMainFilter('all'); setNlemSubFilter('all'); setVisibleCount(10); }} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
