@@ -307,7 +307,7 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
     reimbursement: initialData?.reimbursement || [], 
     image: initialData?.image || "",
     leaflet: initialData?.leaflet || "",
-    relatedDocument: initialData?.relatedDocument || "", // <-- เพิ่ม field ใหม่
+    relatedDocument: initialData?.relatedDocument || "", 
     type: initialData?.type || "injection",
     id: initialData?.id || null
   });
@@ -346,7 +346,7 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="bg-slate-800 text-white p-4 flex justify-between items-center sticky top-0"><h2 className="text-xl font-bold">{initialData ? 'แก้ไขข้อมูลยา' : 'เพิ่มยาใหม่'}</h2><button onClick={onClose}><X size={24} /></button></div>
+        <div className="bg-slate-800 text-white p-4 flex justify-between items-center sticky top-0"><h2 className="text-xl font-bold">{initialData ? 'แก้ไขข้อมูลยา' : 'เพิ่มยาใหม่'}</h2><button type="button" onClick={onClose}><X size={24} /></button></div>
         <div className="p-6 overflow-y-auto custom-scrollbar space-y-4">
            <div className="grid grid-cols-2 gap-4">
              <div className="col-span-2"><label className="block text-sm font-medium text-slate-700 mb-1">ชื่อยาสามัญ *</label><input name="genericName" value={formData.genericName} onChange={handleChange} className="w-full p-2 border rounded-lg" required /></div>
@@ -448,31 +448,31 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
 
              <div className="col-span-2"><hr className="my-2"/></div>
              
-             {/* 1. รูปผลิตภัณฑ์ (700KB) */}
+             {/* 1. รูปผลิตภัณฑ์ (300KB) */}
              <FileUploader 
                label="รูปผลิตภัณฑ์" 
                initialUrl={getDisplayImageUrl(formData.image)} 
                previewUrl={formData.image} 
                onFileSelect={(base64) => setFormData(prev => ({...prev, image: base64}))} 
-               maxSizeKB={700}
+               maxSizeKB={300}
              />
              
-             {/* 2. เอกสารกำกับยา (700KB) */}
+             {/* 2. เอกสารกำกับยา (600KB) */}
              <FileUploader 
                label="เอกสารกำกับยา (Leaflet)" 
                initialUrl={getDisplayImageUrl(formData.leaflet)} 
                previewUrl={formData.leaflet} 
                onFileSelect={(base64) => setFormData(prev => ({...prev, leaflet: base64}))} 
-               maxSizeKB={700}
+               maxSizeKB={600}
              />
 
-             {/* 3. เอกสารที่เกี่ยวข้อง (300KB) <-- เพิ่มใหม่ */}
+             {/* 3. เอกสารที่เกี่ยวข้อง (500KB) <-- เพิ่มใหม่ */}
              <FileUploader 
                label="เอกสารที่เกี่ยวข้อง" 
                initialUrl={getDisplayImageUrl(formData.relatedDocument)} 
                previewUrl={formData.relatedDocument} 
                onFileSelect={(base64) => setFormData(prev => ({...prev, relatedDocument: base64}))} 
-               maxSizeKB={300} // <-- กำหนดขนาด 300KB
+               maxSizeKB={500} // <-- กำหนดขนาด 300KB
              />
 
           </div>
