@@ -1,10 +1,10 @@
-// --- FULL CODE: Auto-Delete Files + Resize Limits (FINAL VERSION) ---
+// --- FULL CODE: Auto-Delete (Fetch First Logic) + Logs ---
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, User } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
-// 1. เพิ่ม deleteObject เพื่อสั่งลบไฟล์
+// ✅ 1. เพิ่ม getDoc เข้ามาใน import
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 import { DRUG_GROUPS } from './Form';
@@ -308,31 +308,67 @@ export default function App() {
   const handleSaveDrug = async (drugData) => { try { const collRef = collection(db, 'drugs'); const dataToSave = { ...drugData, lastUpdated: serverTimestamp(), updatedBy: "Admin" }; if (drugData.id) { const docRef = doc(db, 'drugs', drugData.id); const { id, ...dataToUpdate } = dataToSave; await updateDoc(docRef, dataToUpdate); } else { const { id, ...newData } = dataToSave; await addDoc(collRef, newData); } setIsFormOpen(false); setSelectedDrug(null); setIsEditing(false); } catch (error) { console.error("Error saving drug:", error); alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล"); } };
   const requestDeleteDrug = (id) => { setDrugToDelete(id); };
   
-  // ✅ ฟังก์ชันลบยา + ลบไฟล์อัตโนมัติ (Cleanup Logic)
+  // ✅ 2. ฟังก์ชันลบที่ได้รับการปรับปรุงใหม่ (Fetch First)
   const confirmDeleteDrug = async () => { 
     if (!drugToDelete) return; 
+    
     try { 
-      // 1. หาข้อมูลยาที่จะลบก่อน เพื่อเอา URL ไฟล์มาลบ
-      const drug = drugs.find(d => d.id === drugToDelete);
-      if (drug) {
-         const deleteFile = async (url) => {
-            if (!url || !url.includes('firebasestorage')) return;
+      console.log("🔥 เริ่มต้นกระบวนการลบ ID:", drugToDelete);
+
+      // 2.1 ดึงข้อมูลยาตัวนั้นจาก Database โดยตรง (เพื่อให้ได้ URL ไฟล์ที่ถูกต้องแน่นอน)
+      const docRef = doc(db, 'drugs', drugToDelete);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        console.error("❌ ไม่พบข้อมูลยานี้ใน Database (อาจถูกลบไปแล้ว)");
+        alert("ไม่พบข้อมูลยานี้");
+        setDrugToDelete(null);
+        return;
+      }
+
+      const drugData = docSnap.data();
+      console.log("📄 พบข้อมูลยาที่จะลบ:", drugData);
+
+      // 2.2 ฟังก์ชันย่อยสำหรับลบไฟล์
+      const deleteFileIfExists = async (url, fileType) => {
+         if (!url) {
+            console.log(`⚪ ${fileType}: ไม่มีไฟล์แนบ (ข้าม)`);
+            return;
+         }
+         
+         // เช็คว่าเป็นลิงก์ของ Firebase Storage หรือไม่
+         if (url.includes('firebasestorage')) {
+            console.log(`🗑️ กำลังลบ ${fileType}:`, url);
             try {
                const fileRef = ref(storage, url);
                await deleteObject(fileRef);
-            } catch (err) { console.warn("ลบไฟล์ไม่สำเร็จ (อาจไม่มีไฟล์อยู่จริง):", err); }
-         };
-         // สั่งลบทั้ง 3 ไฟล์ (ถ้ามี)
-         await deleteFile(drug.image);
-         await deleteFile(drug.leaflet);
-         await deleteFile(drug.relatedDocument);
-      }
+               console.log(`✅ ลบ ${fileType} สำเร็จ!`);
+            } catch (err) {
+               console.warn(`⚠️ ลบ ${fileType} ไม่สำเร็จ (อาจไม่มีไฟล์อยู่จริง):`, err.message);
+            }
+         } else {
+            console.log(`⏩ ${fileType}: ไม่ใช่ไฟล์ Firebase Storage (ข้าม)`);
+         }
+      };
 
-      // 2. ลบข้อมูลจาก Database
-      await deleteDoc(doc(db, 'drugs', drugToDelete)); 
+      // 2.3 สั่งลบทั้ง 3 ไฟล์ (ถ้ามี)
+      await deleteFileIfExists(drugData.image, "รูปผลิตภัณฑ์");
+      await deleteFileIfExists(drugData.leaflet, "เอกสารกำกับยา");
+      await deleteFileIfExists(drugData.relatedDocument, "เอกสารที่เกี่ยวข้อง");
+
+      // 2.4 ลบข้อมูล Text ออกจาก Database
+      await deleteDoc(docRef);
+      console.log("🏁 ลบข้อมูลใน Database สำเร็จ");
+
+      // 2.5 ปิดหน้าต่าง
+      setSelectedDrug(null); 
+      setIsFormOpen(false); 
+      setDrugToDelete(null); 
       
-      setSelectedDrug(null); setIsFormOpen(false); setDrugToDelete(null); 
-    } catch (error) { console.error("Error deleting drug:", error); alert("ลบข้อมูลไม่สำเร็จ"); } 
+    } catch (error) { 
+      console.error("💥 Error ร้ายแรงขณะลบ:", error); 
+      alert("ลบข้อมูลไม่สำเร็จ: " + error.message); 
+    } 
   };
   
   const handleAddSeedData = async () => { try { if (!db) { alert("Firestore DB instance ไม่พร้อมใช้งาน"); return; } const collRef = collection(db, 'drugs'); if (INITIAL_DATA.length > 0) { await addDoc(collRef, INITIAL_DATA[0]); alert("เพิ่มข้อมูลตัวอย่างสำเร็จ!"); } else { alert("ไม่มีข้อมูลเริ่มต้นสำหรับเพิ่ม"); } } catch(e) { console.error("Error adding seed data:", e); alert(`ไม่สามารถเพิ่มข้อมูลตัวอย่างได้: ${e.message}`); } };
