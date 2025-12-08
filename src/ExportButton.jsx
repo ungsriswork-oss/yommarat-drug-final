@@ -1,3 +1,4 @@
+// ExportButton.jsx
 import React, { useState } from 'react';
 import { collection, getDocs } from "firebase/firestore";
 import * as XLSX from 'xlsx';
@@ -10,6 +11,7 @@ const ExportButton = ({ db }) => {
 
     setLoading(true);
     try {
+      // (การดึงข้อมูลและ error handling คงเดิม)
       const querySnapshot = await getDocs(collection(db, "drugs"));
       
       const data = querySnapshot.docs.map(doc => {
@@ -19,14 +21,19 @@ const ExportButton = ({ db }) => {
           id: doc.id,
           ...item,
           
-          // ✅ แก้ไข 1: แปลง "สิทธิการเบิกจ่าย" จาก List ให้เป็นข้อความ
+          // แปลง "สิทธิการเบิกจ่าย" จาก List ให้เป็นข้อความ
           reimbursement: Array.isArray(item.reimbursement) 
-            ? item.reimbursement.join(", ") // ถ้ามีหลายอัน ให้คั่นด้วยลูกน้ำ
-            : item.reimbursement || "",      // ถ้าไม่มี ให้ปล่อยว่าง
+            ? item.reimbursement.join(", ") 
+            : item.reimbursement || "",      
 
-          // ✅ แก้ไข 2: ตัดไฟล์รูปภาพ/PDF ออกเหมือนเดิม
+          // ✅ แก้ไข: แปลง Image (รูปผลิตภัณฑ์)
           image: item.image ? "มีรูปภาพ" : "ไม่มีรูป", 
-          leaflet: item.leaflet ? "มีเอกสาร PDF" : "ไม่มีเอกสาร"
+          
+          // ✅ แก้ไข: แปลง Leaflet (เอกสารกำกับยา)
+          leaflet: item.leaflet ? "มีเอกสาร PDF" : "ไม่มีเอกสาร PDF",
+          
+          // 🟢 เพิ่ม: แปลง RelatedDocument (เอกสารเพิ่มเติม)
+          relatedDocument: item.relatedDocument ? "มีเอกสาร PDF" : "ไม่มีเอกสาร PDF"
         };
       });
 
