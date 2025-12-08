@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, limit, orderBy, where } from 'firebase/firestore';
+// ✅ 1. เพิ่ม serverTimestamp ใน import
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, limit, orderBy, where, serverTimestamp } from 'firebase/firestore';
 
 // ✅ นำเข้าข้อมูลกลุ่มยาจากไฟล์ Form.jsx
 import { DRUG_GROUPS } from './Form';
@@ -62,6 +63,21 @@ const base64ToBlob = (base64, type = 'application/pdf') => {
     console.error("Blob error", e);
     return null;
   }
+};
+
+// ✅ 2. เพิ่มฟังก์ชันแปลงวันที่
+const formatDate = (timestamp) => {
+  if (!timestamp) return "";
+  // กรณี timestamp เป็น Firebase Object (มี .toDate()) หรือเป็น Date object ปกติ
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  
+  return date.toLocaleString('th-TH', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 // --- Components ---
@@ -269,17 +285,15 @@ const DrugCard = ({ drug, onClick }) => (
   </div>
 );
 
-// ✅ 3. ปรับปรุง DrugFormModal ให้มีช่องเลือกกลุ่มยาบัญชีหลัก
 const DrugFormModal = ({ initialData, onClose, onSave }) => {
-  // สร้าง State สำหรับ Form Data (รวม nlemMain, nlemSub)
   const [formData, setFormData] = useState({
     genericName: initialData?.genericName || "",
     brandName: initialData?.brandName || "",
     manufacturer: initialData?.manufacturer || "",
     dosage: initialData?.dosage || "",
     category: initialData?.category || "ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]",
-    nlemMain: initialData?.nlemMain || "", // กลุ่มยาหลัก
-    nlemSub: initialData?.nlemSub || "",   // กลุ่มยาย่อย
+    nlemMain: initialData?.nlemMain || "", 
+    nlemSub: initialData?.nlemSub || "",   
     prescriber: initialData?.prescriber || "",
     usageType: initialData?.usageType || "",
     administration: initialData?.administration || "",
@@ -293,10 +307,8 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
     id: initialData?.id || null
   });
 
-  // State เก็บตัวเลือกย่อย
   const [availableSubGroups, setAvailableSubGroups] = useState([]);
 
-  // Effect: โหลดกลุ่มยาย่อยตอนเปิดฟอร์ม (ถ้ามีข้อมูลเดิม)
   useEffect(() => {
     if (formData.nlemMain) {
       const groupData = DRUG_GROUPS.find(g => g.group === formData.nlemMain);
@@ -314,13 +326,11 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
     setFormData(prev => ({ ...prev, [name]: value })); 
   };
 
-  // ฟังก์ชันเลือกกลุ่มยาหลัก
   const handleMainGroupChange = (e) => {
     const val = e.target.value;
     const groupData = DRUG_GROUPS.find(g => g.group === val);
     setAvailableSubGroups(groupData ? groupData.subgroups : []);
     
-    // รีเซ็ตตัวเลือกย่อยเมื่อเปลี่ยนตัวหลัก
     setFormData(prev => ({
       ...prev,
       nlemMain: val,
@@ -365,11 +375,9 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
                  <option>ยาสมุนไพร</option>
              </select></div>
 
-             {/* --- ✅ ส่วนเลือกกลุ่มยาบัญชีหลักแห่งชาติ (Cascading Dropdown) --- */}
              <div className="col-span-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
                 <label className="block text-sm font-bold text-slate-700 mb-2">กลุ่มยาตามบัญชียาหลักแห่งชาติ</label>
                 
-                {/* กลุ่มยาหลัก */}
                 <label className="block text-xs text-slate-500 mb-1">หมวดหลัก</label>
                 <select 
                   name="nlemMain" 
@@ -383,7 +391,6 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
                   ))}
                 </select>
 
-                {/* กลุ่มยาย่อย */}
                 <label className="block text-xs text-slate-500 mb-1">หมวดย่อย</label>
                 <select 
                   name="nlemSub" 
@@ -398,7 +405,6 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
                   ))}
                 </select>
              </div>
-             {/* ----------------------------------------------------------- */}
 
              <div><label className="block text-sm font-medium text-slate-700 mb-1">แพทย์ผู้สามารถสั่งใช้</label><input name="prescriber" value={formData.prescriber} onChange={handleChange} className="w-full p-2 border rounded-lg" /></div>
              <div><label className="block text-sm font-medium text-slate-700 mb-1">สามารถสั่งใช้ได้ใน</label><input name="usageType" value={formData.usageType} onChange={handleChange} className="w-full p-2 border rounded-lg" /></div>
@@ -440,6 +446,7 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
   );
 };
 
+// ✅ 3. แก้ไข DetailModal เพิ่มการแสดงผล Last Updated
 const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const displayImage = getDisplayImageUrl(drug.image);
   const displayLeaflet = getDisplayImageUrl(drug.leaflet);
@@ -460,12 +467,34 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="bg-slate-800 text-white p-4 flex justify-between items-center sticky top-0 z-10">
-          <div className="overflow-hidden"><h2 className="text-xl font-bold truncate pr-2">{drug.genericName}</h2><p className="text-slate-300 text-sm truncate">{drug.brandName}</p></div>
+        
+        {/* แก้ไข Header ใส่ position: relative และเพิ่มส่วนแสดงวันเวลา */}
+        <div className="bg-slate-800 text-white p-4 flex justify-between items-center sticky top-0 z-10 relative">
+          <div className="overflow-hidden">
+            <h2 className="text-xl font-bold truncate pr-2">{drug.genericName}</h2>
+            <p className="text-slate-300 text-sm truncate">{drug.brandName}</p>
+          </div>
+          
+          {/* ส่วนแสดง Last Updated (ตามกรอบสีแดงที่ต้องการ) */}
+          {drug.lastUpdated && (
+             <div className="absolute bottom-1 right-14 text-right">
+                <p className="text-[10px] text-slate-400 opacity-80 leading-tight">
+                  แก้ไขล่าสุด: {formatDate(drug.lastUpdated)}
+                </p>
+                {drug.updatedBy && (
+                   <p className="text-[10px] text-slate-500 opacity-60 leading-tight">
+                      โดย: {drug.updatedBy}
+                   </p>
+                )}
+             </div>
+          )}
+          {/* ------------------------------------------------ */}
+
           <div className="flex items-center gap-2 shrink-0">
             {isAdmin && (<><button onClick={onEdit} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors text-yellow-400" title="แก้ไข"><Edit size={18} /></button><button onClick={() => onDelete(drug.id)} className="p-2 bg-slate-700 hover:bg-red-600 rounded-full transition-colors text-red-400 hover:text-white" title="ลบ"><Trash2 size={18} /></button></>)}<button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button>
           </div>
         </div>
+
         <div className="p-0 overflow-y-auto custom-scrollbar bg-white">
           <div className="w-full h-64 bg-slate-100 flex items-center justify-center relative"><MediaDisplay src={displayImage} alt={drug.genericName} className="w-full h-full object-contain" isPdf={false} /><div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">รูปผลิตภัณฑ์</div></div>
           <div className="p-6 space-y-6">
@@ -474,7 +503,6 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
             <div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Shield size={18} className="text-emerald-500" /> การสั่งใช้และกฎหมาย</h3><div className="bg-slate-50 p-4 rounded-lg space-y-3">
               <Row label="ประเภทบัญชียา" value={drug.category} />
               
-              {/* แสดงกลุ่มยาบัญชีหลัก (ถ้ามี) */}
               {drug.nlemMain && (
                 <>
                   <Row label="กลุ่มยาหลัก" value={drug.nlemMain} />
@@ -559,7 +587,38 @@ export default function App() {
   }, [user, searchTerm, visibleCount, filterType]);
 
   const handleAdminToggle = () => { if (isAdmin) { setIsAdmin(false); } else { setIsLoginModalOpen(true); } };
-  const handleSaveDrug = async (drugData) => { try { const collRef = collection(db, 'drugs'); if (drugData.id) { const docRef = doc(db, 'drugs', drugData.id); const { id, ...dataToUpdate } = drugData; await updateDoc(docRef, dataToUpdate); } else { await addDoc(collRef, drugData); } setIsFormOpen(false); setSelectedDrug(null); setIsEditing(false); } catch (error) { console.error("Error saving drug:", error); alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล"); } };
+  
+  // ✅ 4. แก้ไข handleSaveDrug ให้บันทึก lastUpdated
+  const handleSaveDrug = async (drugData) => { 
+    try { 
+      const collRef = collection(db, 'drugs'); 
+      
+      // เตรียมข้อมูลที่จะบันทึก เพิ่ม TimeStamp
+      const dataToSave = {
+          ...drugData,
+          lastUpdated: serverTimestamp(),
+          updatedBy: "Admin" // หรือชื่อผู้ใช้งานถ้ามี
+      };
+
+      if (drugData.id) { 
+        const docRef = doc(db, 'drugs', drugData.id); 
+        const { id, ...dataToUpdate } = dataToSave; // เอา id ออกจากข้อมูลที่จะ update
+        await updateDoc(docRef, dataToUpdate); 
+      } else { 
+        // กรณีเพิ่มใหม่ เอา id ที่อาจติดมาเป็น null ออก
+        const { id, ...newData } = dataToSave;
+        await addDoc(collRef, newData); 
+      } 
+      
+      setIsFormOpen(false); 
+      setSelectedDrug(null); 
+      setIsEditing(false); 
+    } catch (error) { 
+      console.error("Error saving drug:", error); 
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล"); 
+    } 
+  };
+
   const requestDeleteDrug = (id) => { setDrugToDelete(id); };
   const confirmDeleteDrug = async () => { if (!drugToDelete) return; try { await deleteDoc(doc(db, 'drugs', drugToDelete)); setSelectedDrug(null); setIsFormOpen(false); setDrugToDelete(null); } catch (error) { console.error("Error deleting drug:", error); alert("ลบข้อมูลไม่สำเร็จ"); } };
   const handleAddSeedData = async () => { try { const collRef = collection(db, 'drugs'); await addDoc(collRef, INITIAL_DATA[0]); } catch(e) { console.error(e) } };
@@ -584,7 +643,6 @@ export default function App() {
               </button>
             </div>
           </div>
-          {/* ❌ ลบ <Form /> ออกแล้วตามคำขอครับ */}
           <div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อยา, ยี่ห้อ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all outline-none" /></div>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setVisibleCount(10); }} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
