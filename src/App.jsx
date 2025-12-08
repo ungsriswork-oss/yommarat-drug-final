@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare, Paperclip, FilePlus } from 'lucide-react';
+import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare, Paperclip, FilePlus, Loader } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, limit, orderBy, where, serverTimestamp } from 'firebase/firestore';
+// ✅ 1. เพิ่ม Import Storage
+import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
 
 // ✅ นำเข้าข้อมูลกลุ่มยาจากไฟล์ Form.jsx
 import { DRUG_GROUPS } from './Form';
@@ -24,11 +26,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app); // ✅ ประกาศตัวแปร Storage
 
 // --- Helper Functions ---
 const getDisplayImageUrl = (url) => {
   if (!url) return "";
-  if (url.startsWith('data:')) return url;
+  if (url.startsWith('data:')) return url; // Base64 ชั่วคราวตอนพรีวิว
   try {
     if (url.includes('drive.google.com')) {
       let id = null;
@@ -49,31 +52,33 @@ const getDisplayImageUrl = (url) => {
   return url;
 };
 
-const base64ToBlob = (base64, type = 'application/pdf') => {
-  try {
-    const binStr = atob(base64.split(',')[1]);
-    const len = binStr.length;
-    const arr = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      arr[i] = binStr.charCodeAt(i);
+// ฟังก์ชันช่วย Upload ไฟล์ไปยัง Storage
+const uploadFileToStorage = async (base64String, folderName) => {
+    // ถ้าไม่มีข้อมูล หรือเป็น URL อยู่แล้ว (ขึ้นต้นด้วย http) ไม่ต้องอัปโหลดใหม่ ให้คืนค่าเดิม
+    if (!base64String || base64String.startsWith('http')) return base64String;
+    
+    try {
+        // สร้างชื่อไฟล์ไม่ซ้ำกันด้วย Timestamp
+        const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const storageRef = ref(storage, `${folderName}/${fileName}`);
+        
+        // อัปโหลด Base64 ขึ้น Storage
+        await uploadString(storageRef, base64String, 'data_url');
+        
+        // ขอ URL ดาวน์โหลดกลับมา
+        const downloadURL = await getDownloadURL(storageRef);
+        return downloadURL;
+    } catch (error) {
+        console.error("Upload failed:", error);
+        throw new Error("อัปโหลดไฟล์ไม่สำเร็จ");
     }
-    return new Blob([arr], { type: type });
-  } catch (e) {
-    console.error("Blob error", e);
-    return null;
-  }
 };
 
 const formatDate = (timestamp) => {
   if (!timestamp) return "";
   const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-  
   return date.toLocaleString('th-TH', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   });
 };
 
@@ -91,6 +96,7 @@ const MediaDisplay = ({ src, alt, className, isPdf }) => {
     );
   }
 
+  // เช็คว่าเป็น PDF หรือไม่ (ทั้งแบบ Base64 และ URL จาก Storage ที่มักจะไม่มีนามสกุล .pdf ชัดเจนใน path แต่เราดูจากบริบทได้)
   if (isPdf || (src.startsWith('data:application/pdf'))) {
     return (
       <div className={`bg-slate-100 relative flex flex-col items-center justify-center text-slate-500 border border-slate-200 ${className}`}>
@@ -126,45 +132,27 @@ const MultiSelect = ({ label, options, value = [], onChange }) => {
   }, []);
 
   const toggleOption = (option) => {
-    const newValue = value.includes(option)
-      ? value.filter(v => v !== option)
-      : [...value, option];
+    const newValue = value.includes(option) ? value.filter(v => v !== option) : [...value, option];
     onChange(newValue);
   };
 
   return (
     <div className="relative" ref={containerRef}>
       <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-      <div
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full p-2 border rounded-lg bg-white flex justify-between items-center cursor-pointer min-h-[42px]"
-      >
-        <span className={`text-sm ${value.length === 0 ? 'text-gray-400' : 'text-slate-700'} truncate`}>
-          {value.length === 0 ? "เลือกสิทธิ..." : `เลือกแล้ว ${value.length} รายการ`}
-        </span>
+      <div onClick={() => setIsOpen(!isOpen)} className="w-full p-2 border rounded-lg bg-white flex justify-between items-center cursor-pointer min-h-[42px]">
+        <span className={`text-sm ${value.length === 0 ? 'text-gray-400' : 'text-slate-700'} truncate`}>{value.length === 0 ? "เลือกสิทธิ..." : `เลือกแล้ว ${value.length} รายการ`}</span>
         <ChevronRight size={16} className={`transition-transform ${isOpen ? 'rotate-90' : ''}`}/>
       </div>
-
       {isOpen && (
         <div className="absolute z-20 w-full bg-white border rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto p-1">
           {options.map((option) => (
-            <div
-              key={option}
-              onClick={() => toggleOption(option)}
-              className="flex items-center gap-2 p-2 hover:bg-blue-50 rounded cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                checked={value.includes(option)}
-                onChange={() => {}}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
+            <div key={option} onClick={() => toggleOption(option)} className="flex items-center gap-2 p-2 hover:bg-blue-50 rounded cursor-pointer">
+              <input type="checkbox" checked={value.includes(option)} onChange={() => {}} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
               <span className="text-sm text-slate-700">{option}</span>
             </div>
           ))}
         </div>
       )}
-      
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {value.map(v => (
@@ -194,13 +182,12 @@ const FileUploader = ({ label, onFileSelect, previewUrl, initialUrl }) => {
       onFileSelect(reader.result); 
       setError("");
     };
-    reader.onerror = () => {
-      setError("อ่านไฟล์ไม่สำเร็จ");
-    };
+    reader.onerror = () => { setError("อ่านไฟล์ไม่สำเร็จ"); };
     reader.readAsDataURL(file);
   };
 
-  const isPdf = previewUrl?.startsWith('data:application/pdf') || initialUrl?.includes('.pdf');
+  // Logic การแสดงผล PDF icon: ถ้าเป็น PDF Base64 หรือ URL ที่น่าจะเป็น PDF
+  const isPdf = previewUrl?.startsWith('data:application/pdf') || (initialUrl && initialUrl.toLowerCase().includes('alt=media') && !initialUrl.includes('.jpg') && !initialUrl.includes('.png'));
 
   return (
     <div className="col-span-2">
@@ -209,10 +196,7 @@ const FileUploader = ({ label, onFileSelect, previewUrl, initialUrl }) => {
       </label>
       <div className="flex gap-3 items-start">
         <div className="flex-1">
-           <div 
-             onClick={() => fileInputRef.current?.click()}
-             className="w-full p-3 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center gap-2 text-slate-500"
-           >
+           <div onClick={() => fileInputRef.current?.click()} className="w-full p-3 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center gap-2 text-slate-500">
              <UploadCloud size={20} />
              <span className="text-sm">คลิกเพื่อเลือกไฟล์</span>
            </div>
@@ -282,7 +266,7 @@ const DrugCard = ({ drug, onClick }) => (
   </div>
 );
 
-const DrugFormModal = ({ initialData, onClose, onSave }) => {
+const DrugFormModal = ({ initialData, onClose, onSave, isSaving }) => {
   const [formData, setFormData] = useState({
     genericName: initialData?.genericName || "",
     brandName: initialData?.brandName || "",
@@ -300,7 +284,6 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
     reimbursement: initialData?.reimbursement || [],
     image: initialData?.image || "",
     leaflet: initialData?.leaflet || "",
-    // ✅ เพิ่ม 2 field ใหม่
     relatedDoc: initialData?.relatedDoc || "",
     otherDoc: initialData?.otherDoc || "",
     type: initialData?.type || "injection",
@@ -341,8 +324,9 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="bg-slate-800 text-white p-4 flex justify-between items-center sticky top-0"><h2 className="text-xl font-bold">{initialData ? 'แก้ไขข้อมูลยา' : 'เพิ่มยาใหม่'}</h2><button onClick={onClose}><X size={24} /></button></div>
+        <div className="bg-slate-800 text-white p-4 flex justify-between items-center sticky top-0"><h2 className="text-xl font-bold">{initialData ? 'แก้ไขข้อมูลยา' : 'เพิ่มยาใหม่'}</h2><button onClick={onClose} disabled={isSaving}><X size={24} /></button></div>
         <div className="p-6 overflow-y-auto custom-scrollbar space-y-4">
+           {/* Form Fields */}
            <div className="grid grid-cols-2 gap-4">
              <div className="col-span-2"><label className="block text-sm font-medium text-slate-700 mb-1">ชื่อยาสามัญ *</label><input name="genericName" value={formData.genericName} onChange={handleChange} className="w-full p-2 border rounded-lg" required /></div>
              <div className="col-span-2"><label className="block text-sm font-medium text-slate-700 mb-1">ชื่อยี่ห้อ</label><input name="brandName" value={formData.brandName} onChange={handleChange} className="w-full p-2 border rounded-lg" /></div>
@@ -377,32 +361,15 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
 
              <div className="col-span-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
                 <label className="block text-sm font-bold text-slate-700 mb-2">กลุ่มยาตามบัญชียาหลักแห่งชาติ</label>
-                
                 <label className="block text-xs text-slate-500 mb-1">หมวดหลัก</label>
-                <select 
-                  name="nlemMain" 
-                  value={formData.nlemMain} 
-                  onChange={handleMainGroupChange} 
-                  className="w-full p-2 border rounded-lg mb-3 bg-white"
-                >
+                <select name="nlemMain" value={formData.nlemMain} onChange={handleMainGroupChange} className="w-full p-2 border rounded-lg mb-3 bg-white">
                   <option value="">-- ไม่ระบุ --</option>
-                  {DRUG_GROUPS.map((item, index) => (
-                    <option key={index} value={item.group}>{item.group}</option>
-                  ))}
+                  {DRUG_GROUPS.map((item, index) => (<option key={index} value={item.group}>{item.group}</option>))}
                 </select>
-
                 <label className="block text-xs text-slate-500 mb-1">หมวดย่อย</label>
-                <select 
-                  name="nlemSub" 
-                  value={formData.nlemSub} 
-                  onChange={handleChange} 
-                  disabled={!formData.nlemMain} 
-                  className="w-full p-2 border rounded-lg bg-white disabled:bg-slate-100 disabled:text-slate-400"
-                >
+                <select name="nlemSub" value={formData.nlemSub} onChange={handleChange} disabled={!formData.nlemMain} className="w-full p-2 border rounded-lg bg-white disabled:bg-slate-100 disabled:text-slate-400">
                   <option value="">-- ไม่ระบุ --</option>
-                  {availableSubGroups.map((sub, index) => (
-                    <option key={index} value={sub}>{sub}</option>
-                  ))}
+                  {availableSubGroups.map((sub, index) => (<option key={index} value={sub}>{sub}</option>))}
                 </select>
              </div>
 
@@ -422,45 +389,20 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
              )}
 
              <div className="col-span-2 mt-4">
-                <label className="block text-sm font-bold text-orange-600 mb-1 flex items-center gap-1">
-                  <Info size={16}/> หมายเหตุเพิ่มเติม
-                </label>
-                <textarea 
-                  name="note" 
-                  rows="2" 
-                  value={formData.note || ""} 
-                  onChange={handleChange} 
-                  className="w-full p-2 border rounded-lg bg-orange-50 focus:bg-white transition-colors resize-y border-orange-200 focus:border-orange-400" 
-                  placeholder="ระบุข้อมูลเพิ่มเติม หรือข้อควรระวัง (ถ้ามี)..." 
-                />
+                <label className="block text-sm font-bold text-orange-600 mb-1 flex items-center gap-1"><Info size={16}/> หมายเหตุเพิ่มเติม</label>
+                <textarea name="note" rows="2" value={formData.note || ""} onChange={handleChange} className="w-full p-2 border rounded-lg bg-orange-50 focus:bg-white transition-colors resize-y border-orange-200 focus:border-orange-400" placeholder="ระบุข้อมูลเพิ่มเติม หรือข้อควรระวัง (ถ้ามี)..." />
              </div>
 
              <div className="col-span-2"><hr className="my-2"/></div>
-             
-             {/* Upload 1: รูปสินค้า */}
              <FileUploader label="รูปผลิตภัณฑ์" initialUrl={getDisplayImageUrl(formData.image)} previewUrl={formData.image} onFileSelect={(base64) => setFormData(prev => ({...prev, image: base64}))} />
-             
-             {/* Upload 2: Leaflet */}
              <FileUploader label="เอกสารกำกับยา (Leaflet)" initialUrl={getDisplayImageUrl(formData.leaflet)} previewUrl={formData.leaflet} onFileSelect={(base64) => setFormData(prev => ({...prev, leaflet: base64}))} />
-             
-             {/* ✅ Upload 3: เอกสารที่เกี่ยวข้อง */}
-             <FileUploader 
-                label="เอกสารที่เกี่ยวข้อง (เช่น DUE จ.2)" 
-                initialUrl={getDisplayImageUrl(formData.relatedDoc)} 
-                previewUrl={formData.relatedDoc} 
-                onFileSelect={(base64) => setFormData(prev => ({...prev, relatedDoc: base64}))} 
-             />
-
-             {/* ✅ Upload 4: เอกสารเพิ่มเติม */}
-             <FileUploader 
-                label="เอกสารอื่น ๆ เพิ่มเติม" 
-                initialUrl={getDisplayImageUrl(formData.otherDoc)} 
-                previewUrl={formData.otherDoc} 
-                onFileSelect={(base64) => setFormData(prev => ({...prev, otherDoc: base64}))} 
-             />
+             <FileUploader label="เอกสารที่เกี่ยวข้อง (เช่น DUE จ.2)" initialUrl={getDisplayImageUrl(formData.relatedDoc)} previewUrl={formData.relatedDoc} onFileSelect={(base64) => setFormData(prev => ({...prev, relatedDoc: base64}))} />
+             <FileUploader label="เอกสารอื่น ๆ เพิ่มเติม" initialUrl={getDisplayImageUrl(formData.otherDoc)} previewUrl={formData.otherDoc} onFileSelect={(base64) => setFormData(prev => ({...prev, otherDoc: base64}))} />
 
           </div>
-          <button onClick={() => onSave(formData)} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 mt-4"><Save size={20} /> บันทึกข้อมูล</button>
+          <button onClick={() => onSave(formData)} disabled={isSaving} className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-bold flex items-center justify-center gap-2 mt-4 transition-colors">
+            {isSaving ? <><Loader className="animate-spin" size={20}/> กำลังบันทึก...</> : <><Save size={20} /> บันทึกข้อมูล</>}
+          </button>
         </div>
       </div>
     </div>
@@ -470,58 +412,35 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
 const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const displayImage = getDisplayImageUrl(drug.image);
   const displayLeaflet = getDisplayImageUrl(drug.leaflet);
-  // ✅ เตรียมตัวแปรสำหรับไฟล์ใหม่
   const displayRelatedDoc = getDisplayImageUrl(drug.relatedDoc);
   const displayOtherDoc = getDisplayImageUrl(drug.otherDoc);
   
   const InfoItem = ({ icon, label, value }) => (<div><div className="flex items-center gap-1 text-slate-500 text-xs mb-1">{icon} {label}</div><div className="font-medium text-slate-800">{value || "-"}</div></div>);
   const Row = ({ label, value }) => (<div className="flex justify-between items-start text-sm"><span className="text-slate-500 min-w-[100px] shrink-0">{label}:</span><span className="text-slate-800 font-medium text-right flex-1 whitespace-pre-wrap">{value || "-"}</span></div>);
 
-  // ฟังก์ชันเปิดไฟล์
-  const handleOpenFile = (base64Url) => {
-    if (!base64Url) return;
-    let urlToOpen = base64Url;
-    if (base64Url.startsWith('data:application/pdf')) {
-      const blob = base64ToBlob(base64Url);
-      if (blob) urlToOpen = URL.createObjectURL(blob);
-    }
-    window.open(urlToOpen, '_blank');
-  };
+  const handleOpenFile = (url) => { if (url) window.open(url, '_blank'); };
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        
         <div className="bg-slate-800 text-white p-4 flex justify-between items-start sticky top-0 z-10">
           <div className="flex flex-col overflow-hidden mr-2 pt-1">
             <h2 className="text-xl font-bold truncate pr-2 leading-tight">{drug.genericName}</h2>
             <p className="text-slate-300 text-sm truncate">{drug.brandName}</p>
           </div>
-          
           <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
             <div className="flex items-center gap-3">
               {isAdmin && (
                 <>
-                  <button onClick={onEdit} className="text-slate-400 hover:text-yellow-400 transition-colors" title="แก้ไข">
-                    <Edit size={18} />
-                  </button>
-                  <button onClick={() => onDelete(drug.id)} className="text-slate-400 hover:text-red-400 transition-colors" title="ลบ">
-                    <Trash2 size={18} />
-                  </button>
+                  <button onClick={onEdit} className="text-slate-400 hover:text-yellow-400 transition-colors" title="แก้ไข"><Edit size={18} /></button>
+                  <button onClick={() => onDelete(drug.id)} className="text-slate-400 hover:text-red-400 transition-colors" title="ลบ"><Trash2 size={18} /></button>
                 </>
               )}
-              <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors ml-1">
-                <X size={24} />
-              </button>
+              <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors ml-1"><X size={24} /></button>
             </div>
-            {drug.lastUpdated && (
-                <span className="text-[10px] text-slate-400 font-light tracking-wide">
-                  แก้ไขเมื่อ: {formatDate(drug.lastUpdated)}
-                </span>
-            )}
+            {drug.lastUpdated && (<span className="text-[10px] text-slate-400 font-light tracking-wide">แก้ไขเมื่อ: {formatDate(drug.lastUpdated)}</span>)}
           </div>
         </div>
-
         <div className="p-0 overflow-y-auto custom-scrollbar bg-white">
           <div className="w-full h-64 bg-slate-100 flex items-center justify-center relative"><MediaDisplay src={displayImage} alt={drug.genericName} className="w-full h-full object-contain" isPdf={false} /><div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">รูปผลิตภัณฑ์</div></div>
           <div className="p-6 space-y-6">
@@ -529,51 +448,23 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
             <hr className="border-slate-100" />
             <div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Shield size={18} className="text-emerald-500" /> การสั่งใช้และกฎหมาย</h3><div className="bg-slate-50 p-4 rounded-lg space-y-3">
               <Row label="ประเภทบัญชียา" value={drug.category} />
-              
-              {drug.nlemMain && (
-                <>
-                  <Row label="กลุ่มยาหลัก" value={drug.nlemMain} />
-                  {drug.nlemSub && <Row label="กลุ่มยาย่อย" value={drug.nlemSub} />}
-                </>
-              )}
-
+              {drug.nlemMain && (<><Row label="กลุ่มยาหลัก" value={drug.nlemMain} />{drug.nlemSub && <Row label="กลุ่มยาย่อย" value={drug.nlemSub} />}</>)}
               {drug.reimbursement && drug.reimbursement.length > 0 && (
                 <div className="flex justify-between items-start text-sm pt-2 border-t border-slate-100 mt-2">
                   <span className="text-slate-500 min-w-[100px] shrink-0">สิทธิเบิกจ่าย:</span>
-                  <div className="flex flex-wrap gap-1 justify-end flex-1">
-                    {drug.reimbursement.map(r => (
-                      <span key={r} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-md">{r}</span>
-                    ))}
-                  </div>
+                  <div className="flex flex-wrap gap-1 justify-end flex-1">{drug.reimbursement.map(r => (<span key={r} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-md">{r}</span>))}</div>
                 </div>
               )}
-
               <Row label="แพทย์ผู้สามารถสั่งใช้" value={drug.prescriber} /><Row label="สามารถสั่งใช้ได้ใน" value={drug.usageType} />
             </div></div>
             {drug.type === 'injection' && (<div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Thermometer size={18} className="text-rose-500" /> การผสมและการเก็บรักษา</h3><div className="bg-rose-50 p-4 rounded-lg space-y-3 border border-rose-100"><Row label="สารละลายที่ใช้" value={drug.diluent} /><Row label="ความคงตัว" value={drug.stability} /><Row label="วิธีการบริหาร" value={drug.administration} /></div></div>)}
             {drug.note && (<div className="bg-orange-50 border border-orange-100 p-4 rounded-lg"><h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2 text-sm"><Info size={16} /> หมายเหตุเพิ่มเติม</h3><p className="text-slate-700 text-sm whitespace-pre-wrap">{drug.note}</p></div>)}
             
-            {/* ✅ ส่วนแสดงไฟล์เอกสารต่าง ๆ */}
             <div className="space-y-3">
-                {drug.leaflet && (
-                    <button onClick={() => handleOpenFile(displayLeaflet)} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm">
-                        <FileText size={20} /> ดูเอกสารกำกับยา (Leaflet)
-                    </button>
-                )}
-                
-                {drug.relatedDoc && (
-                    <button onClick={() => handleOpenFile(displayRelatedDoc)} className="w-full py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm">
-                        <Paperclip size={20} /> ดูเอกสารที่เกี่ยวข้อง
-                    </button>
-                )}
-                
-                {drug.otherDoc && (
-                    <button onClick={() => handleOpenFile(displayOtherDoc)} className="w-full py-3 bg-slate-500 hover:bg-slate-600 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm">
-                        <FilePlus size={20} /> ดูเอกสารอื่น ๆ เพิ่มเติม
-                    </button>
-                )}
+                {drug.leaflet && <button onClick={() => handleOpenFile(displayLeaflet)} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"><FileText size={20} /> ดูเอกสารกำกับยา (Leaflet)</button>}
+                {drug.relatedDoc && <button onClick={() => handleOpenFile(displayRelatedDoc)} className="w-full py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"><Paperclip size={20} /> ดูเอกสารที่เกี่ยวข้อง</button>}
+                {drug.otherDoc && <button onClick={() => handleOpenFile(displayOtherDoc)} className="w-full py-3 bg-slate-500 hover:bg-slate-600 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"><FilePlus size={20} /> ดูเอกสารอื่น ๆ เพิ่มเติม</button>}
             </div>
-            
           </div>
         </div>
       </div>
@@ -581,7 +472,6 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   );
 };
 
-// ✅ เพิ่ม key ว่างเข้าไปใน INITIAL_DATA เพื่อความปลอดภัยของโครงสร้างข้อมูล
 const INITIAL_DATA = [{genericName: "Paracetamol", brandName: "Tylenol", manufacturer: "Janssen", dosage: "Tab 500 mg", category: "ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]", prescriber: "", usageType: "", administration: "-", diluent: "-", stability: "-", image: "", leaflet: "", relatedDoc: "", otherDoc: "", type: "oral"}];
 
 export default function App() {
@@ -598,6 +488,9 @@ export default function App() {
   const [isEditing, setIsEditing] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [permissionError, setPermissionError] = useState(false);
+  
+  // ✅ State สำหรับ Loading ตอนกด Save
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => { const initAuth = async () => { try { await signInAnonymously(auth); } catch (error) { console.error("Auth error:", error); } }; initAuth(); const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => setUser(currentUser)); return () => unsubscribeAuth(); }, []);
   
@@ -617,10 +510,7 @@ export default function App() {
           return generic.includes(lowerTerm) || brand.includes(lowerTerm);
         });
       }
-
-      if (filterType !== 'all') {
-        allDrugs = allDrugs.filter(drug => drug.type === filterType);
-      }
+      if (filterType !== 'all') allDrugs = allDrugs.filter(drug => drug.type === filterType);
 
       const visibleList = allDrugs.slice(0, visibleCount);
       setDrugs(visibleList);
@@ -631,17 +521,30 @@ export default function App() {
       setLoading(false); 
       if (error.code === 'permission-denied') setPermissionError(true);
     });
-    
     return () => unsubscribe();
   }, [user, searchTerm, visibleCount, filterType]);
 
   const handleAdminToggle = () => { if (isAdmin) { setIsAdmin(false); } else { setIsLoginModalOpen(true); } };
   
+  // ✅ ปรับปรุง handleSaveDrug ให้ Upload ไฟล์ก่อนบันทึก
   const handleSaveDrug = async (drugData) => { 
-    try { 
+    try {
+      setIsSaving(true); // เริ่มหมุน Loading
+      
+      // 1. Upload รูปและเอกสารทั้งหมด (ถ้ามี)
+      // ฟังก์ชัน uploadFileToStorage จะเช็คเองว่าถ้าเป็น URL แล้วจะไม่ Upload ซ้ำ
+      const imageUrl = await uploadFileToStorage(drugData.image, 'images');
+      const leafletUrl = await uploadFileToStorage(drugData.leaflet, 'leaflets');
+      const relatedUrl = await uploadFileToStorage(drugData.relatedDoc, 'docs');
+      const otherUrl = await uploadFileToStorage(drugData.otherDoc, 'docs');
+
       const collRef = collection(db, 'drugs'); 
       const dataToSave = {
           ...drugData,
+          image: imageUrl || "",
+          leaflet: leafletUrl || "",
+          relatedDoc: relatedUrl || "",
+          otherDoc: otherUrl || "",
           lastUpdated: serverTimestamp(),
           updatedBy: "Admin" 
       };
@@ -660,14 +563,15 @@ export default function App() {
       setIsEditing(false); 
     } catch (error) { 
       console.error("Error saving drug:", error); 
-      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล"); 
-    } 
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล: " + error.message); 
+    } finally {
+      setIsSaving(false); // หยุดหมุน Loading
+    }
   };
 
   const requestDeleteDrug = (id) => { setDrugToDelete(id); };
   const confirmDeleteDrug = async () => { if (!drugToDelete) return; try { await deleteDoc(doc(db, 'drugs', drugToDelete)); setSelectedDrug(null); setIsFormOpen(false); setDrugToDelete(null); } catch (error) { console.error("Error deleting drug:", error); alert("ลบข้อมูลไม่สำเร็จ"); } };
   const handleAddSeedData = async () => { try { const collRef = collection(db, 'drugs'); await addDoc(collRef, INITIAL_DATA[0]); } catch(e) { console.error(e) } };
-  
   const consoleUrl = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/rules`;
 
   return (
@@ -675,17 +579,10 @@ export default function App() {
       <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-10">
         <div className="max-w-md mx-auto">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-              <div className="bg-blue-600 text-white p-2 rounded-lg"><Pill size={20} /></div> 
-              Yommarat Drug List
-            </h1>
-            
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><div className="bg-blue-600 text-white p-2 rounded-lg"><Pill size={20} /></div> Yommarat Drug List</h1>
             <div className="flex items-center gap-2">
             {isAdmin && <ExportButton db={db} />}
-              
-              <button onClick={handleAdminToggle} className={`p-2 rounded-full transition-colors ${isAdmin ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`} title={isAdmin ? "ออกจากโหมดผู้ดูแล" : "เข้าสู่โหมดผู้ดูแล"}>
-                {isAdmin ? <Unlock size={20}/> : <Lock size={20}/>}
-              </button>
+              <button onClick={handleAdminToggle} className={`p-2 rounded-full transition-colors ${isAdmin ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`} title={isAdmin ? "ออกจากโหมดผู้ดูแล" : "เข้าสู่โหมดผู้ดูแล"}>{isAdmin ? <Unlock size={20}/> : <Lock size={20}/>}</button>
             </div>
           </div>
           <div className="relative mb-3"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} /><input type="text" placeholder="ค้นหาชื่อยา, ยี่ห้อ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all outline-none" /></div>
@@ -704,7 +601,7 @@ export default function App() {
       </main>
       {isAdmin && (<div className="fixed bottom-6 right-6 z-40"><button onClick={() => { setIsEditing(false); setIsFormOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center gap-2"><Plus size={24} /> <span className="font-bold hidden md:inline">เพิ่มยา</span></button></div>)}
       {selectedDrug && !isEditing && (<DetailModal drug={selectedDrug} onClose={() => setSelectedDrug(null)} onEdit={() => { setIsEditing(true); setIsFormOpen(true); }} onDelete={requestDeleteDrug} isAdmin={isAdmin} />)}
-      {isFormOpen && isAdmin && (<DrugFormModal initialData={isEditing ? selectedDrug : null} onClose={() => { setIsFormOpen(false); setIsEditing(false); }} onSave={handleSaveDrug} />)}
+      {isFormOpen && isAdmin && (<DrugFormModal initialData={isEditing ? selectedDrug : null} onClose={() => { setIsFormOpen(false); setIsEditing(false); }} onSave={handleSaveDrug} isSaving={isSaving} />)}
       {isLoginModalOpen && (<AdminLoginModal onClose={() => setIsLoginModalOpen(false)} onLogin={() => setIsAdmin(true)} />)}
       <ConfirmModal isOpen={!!drugToDelete} onClose={() => setDrugToDelete(null)} onConfirm={confirmDeleteDrug} title="ยืนยันการลบ" message="คุณแน่ใจหรือไม่ที่จะลบข้อมูลยานี้? การกระทำนี้ไม่สามารถย้อนกลับได้" />
     </div>
