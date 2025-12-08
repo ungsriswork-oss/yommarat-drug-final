@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare } from 'lucide-react';
+import { Search, Pill, Building, FileText, Info, Shield, Syringe, Thermometer, X, ChevronRight, ChevronLeft, Plus, Save, Trash2, Edit, Image as ImageIcon, UploadCloud, File as FileIcon, AlertCircle, Lock, Unlock, AlertTriangle, ExternalLink, CheckSquare, Paperclip, FilePlus } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-// ✅ 1. เพิ่ม serverTimestamp ใน import
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, limit, orderBy, where, serverTimestamp } from 'firebase/firestore';
 
 // ✅ นำเข้าข้อมูลกลุ่มยาจากไฟล์ Form.jsx
@@ -65,10 +64,8 @@ const base64ToBlob = (base64, type = 'application/pdf') => {
   }
 };
 
-// ✅ 2. เพิ่มฟังก์ชันแปลงวันที่
 const formatDate = (timestamp) => {
   if (!timestamp) return "";
-  // กรณี timestamp เป็น Firebase Object (มี .toDate()) หรือเป็น Date object ปกติ
   const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
   
   return date.toLocaleString('th-TH', {
@@ -303,6 +300,9 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
     reimbursement: initialData?.reimbursement || [],
     image: initialData?.image || "",
     leaflet: initialData?.leaflet || "",
+    // ✅ เพิ่ม 2 field ใหม่
+    relatedDoc: initialData?.relatedDoc || "",
+    otherDoc: initialData?.otherDoc || "",
     type: initialData?.type || "injection",
     id: initialData?.id || null
   });
@@ -436,8 +436,29 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
              </div>
 
              <div className="col-span-2"><hr className="my-2"/></div>
+             
+             {/* Upload 1: รูปสินค้า */}
              <FileUploader label="รูปผลิตภัณฑ์" initialUrl={getDisplayImageUrl(formData.image)} previewUrl={formData.image} onFileSelect={(base64) => setFormData(prev => ({...prev, image: base64}))} />
+             
+             {/* Upload 2: Leaflet */}
              <FileUploader label="เอกสารกำกับยา (Leaflet)" initialUrl={getDisplayImageUrl(formData.leaflet)} previewUrl={formData.leaflet} onFileSelect={(base64) => setFormData(prev => ({...prev, leaflet: base64}))} />
+             
+             {/* ✅ Upload 3: เอกสารที่เกี่ยวข้อง */}
+             <FileUploader 
+                label="เอกสารที่เกี่ยวข้อง (เช่น DUE จ.2)" 
+                initialUrl={getDisplayImageUrl(formData.relatedDoc)} 
+                previewUrl={formData.relatedDoc} 
+                onFileSelect={(base64) => setFormData(prev => ({...prev, relatedDoc: base64}))} 
+             />
+
+             {/* ✅ Upload 4: เอกสารเพิ่มเติม */}
+             <FileUploader 
+                label="เอกสารอื่น ๆ เพิ่มเติม" 
+                initialUrl={getDisplayImageUrl(formData.otherDoc)} 
+                previewUrl={formData.otherDoc} 
+                onFileSelect={(base64) => setFormData(prev => ({...prev, otherDoc: base64}))} 
+             />
+
           </div>
           <button onClick={() => onSave(formData)} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 mt-4"><Save size={20} /> บันทึกข้อมูล</button>
         </div>
@@ -446,19 +467,22 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
   );
 };
 
-// ✅ 3. แก้ไข DetailModal (อัปเดต Layout Header ใหม่: เวลาอยู่ใต้ Icon)
 const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const displayImage = getDisplayImageUrl(drug.image);
   const displayLeaflet = getDisplayImageUrl(drug.leaflet);
+  // ✅ เตรียมตัวแปรสำหรับไฟล์ใหม่
+  const displayRelatedDoc = getDisplayImageUrl(drug.relatedDoc);
+  const displayOtherDoc = getDisplayImageUrl(drug.otherDoc);
   
   const InfoItem = ({ icon, label, value }) => (<div><div className="flex items-center gap-1 text-slate-500 text-xs mb-1">{icon} {label}</div><div className="font-medium text-slate-800">{value || "-"}</div></div>);
   const Row = ({ label, value }) => (<div className="flex justify-between items-start text-sm"><span className="text-slate-500 min-w-[100px] shrink-0">{label}:</span><span className="text-slate-800 font-medium text-right flex-1 whitespace-pre-wrap">{value || "-"}</span></div>);
 
-  const handleOpenLeaflet = () => {
-    if (!displayLeaflet) return;
-    let urlToOpen = displayLeaflet;
-    if (displayLeaflet.startsWith('data:application/pdf')) {
-      const blob = base64ToBlob(displayLeaflet);
+  // ฟังก์ชันเปิดไฟล์
+  const handleOpenFile = (base64Url) => {
+    if (!base64Url) return;
+    let urlToOpen = base64Url;
+    if (base64Url.startsWith('data:application/pdf')) {
+      const blob = base64ToBlob(base64Url);
       if (blob) urlToOpen = URL.createObjectURL(blob);
     }
     window.open(urlToOpen, '_blank');
@@ -468,19 +492,13 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
-        {/* --- ส่วน Header ปรับปรุงใหม่ --- */}
         <div className="bg-slate-800 text-white p-4 flex justify-between items-start sticky top-0 z-10">
-          
-          {/* ส่วนซ้าย: ชื่อยา และ ยี่ห้อ */}
           <div className="flex flex-col overflow-hidden mr-2 pt-1">
             <h2 className="text-xl font-bold truncate pr-2 leading-tight">{drug.genericName}</h2>
             <p className="text-slate-300 text-sm truncate">{drug.brandName}</p>
           </div>
           
-          {/* ส่วนขวา: กลุ่มปุ่ม และ เวลา (เรียงแนวตั้ง) */}
           <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
-             
-            {/* แถวบน: ปุ่มเครื่องมือ (Edit / Delete / Close) */}
             <div className="flex items-center gap-3">
               {isAdmin && (
                 <>
@@ -492,22 +510,17 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
                   </button>
                 </>
               )}
-              {/* ปุ่มปิด (ทำให้เด่นขึ้นเล็กน้อย หรือแยกออกมาก็ได้ แต่รวมกลุ่มจะสวยกว่า) */}
               <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors ml-1">
                 <X size={24} />
               </button>
             </div>
-
-            {/* แถวล่าง: เวลาแก้ไขล่าสุด (ตัวเล็ก อยู่ใต้ Icon) */}
             {drug.lastUpdated && (
                 <span className="text-[10px] text-slate-400 font-light tracking-wide">
                   แก้ไขเมื่อ: {formatDate(drug.lastUpdated)}
                 </span>
             )}
           </div>
-
         </div>
-        {/* ----------------------------- */}
 
         <div className="p-0 overflow-y-auto custom-scrollbar bg-white">
           <div className="w-full h-64 bg-slate-100 flex items-center justify-center relative"><MediaDisplay src={displayImage} alt={drug.genericName} className="w-full h-full object-contain" isPdf={false} /><div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">รูปผลิตภัณฑ์</div></div>
@@ -539,7 +552,28 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
             </div></div>
             {drug.type === 'injection' && (<div className="space-y-4"><h3 className="font-semibold text-slate-800 flex items-center gap-2"><Thermometer size={18} className="text-rose-500" /> การผสมและการเก็บรักษา</h3><div className="bg-rose-50 p-4 rounded-lg space-y-3 border border-rose-100"><Row label="สารละลายที่ใช้" value={drug.diluent} /><Row label="ความคงตัว" value={drug.stability} /><Row label="วิธีการบริหาร" value={drug.administration} /></div></div>)}
             {drug.note && (<div className="bg-orange-50 border border-orange-100 p-4 rounded-lg"><h3 className="font-bold text-orange-800 flex items-center gap-2 mb-2 text-sm"><Info size={16} /> หมายเหตุเพิ่มเติม</h3><p className="text-slate-700 text-sm whitespace-pre-wrap">{drug.note}</p></div>)}
-            {drug.leaflet && (<button onClick={handleOpenLeaflet} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm"><FileText size={20} /> ดูเอกสารกำกับยา (PDF)</button>)}
+            
+            {/* ✅ ส่วนแสดงไฟล์เอกสารต่าง ๆ */}
+            <div className="space-y-3">
+                {drug.leaflet && (
+                    <button onClick={() => handleOpenFile(displayLeaflet)} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm">
+                        <FileText size={20} /> ดูเอกสารกำกับยา (Leaflet)
+                    </button>
+                )}
+                
+                {drug.relatedDoc && (
+                    <button onClick={() => handleOpenFile(displayRelatedDoc)} className="w-full py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm">
+                        <Paperclip size={20} /> ดูเอกสารที่เกี่ยวข้อง
+                    </button>
+                )}
+                
+                {drug.otherDoc && (
+                    <button onClick={() => handleOpenFile(displayOtherDoc)} className="w-full py-3 bg-slate-500 hover:bg-slate-600 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors shadow-sm">
+                        <FilePlus size={20} /> ดูเอกสารอื่น ๆ เพิ่มเติม
+                    </button>
+                )}
+            </div>
+            
           </div>
         </div>
       </div>
@@ -547,7 +581,8 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   );
 };
 
-const INITIAL_DATA = [{genericName: "Paracetamol", brandName: "Tylenol", manufacturer: "Janssen", dosage: "Tab 500 mg", category: "ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]", prescriber: "", usageType: "", administration: "-", diluent: "-", stability: "-", image: "", leaflet: "", type: "oral"}];
+// ✅ เพิ่ม key ว่างเข้าไปใน INITIAL_DATA เพื่อความปลอดภัยของโครงสร้างข้อมูล
+const INITIAL_DATA = [{genericName: "Paracetamol", brandName: "Tylenol", manufacturer: "Janssen", dosage: "Tab 500 mg", category: "ยาพื้นฐาน (basic list ) [บัญชี ก และ ข เดิม]", prescriber: "", usageType: "", administration: "-", diluent: "-", stability: "-", image: "", leaflet: "", relatedDoc: "", otherDoc: "", type: "oral"}];
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -602,24 +637,20 @@ export default function App() {
 
   const handleAdminToggle = () => { if (isAdmin) { setIsAdmin(false); } else { setIsLoginModalOpen(true); } };
   
-  // ✅ 4. แก้ไข handleSaveDrug ให้บันทึก lastUpdated
   const handleSaveDrug = async (drugData) => { 
     try { 
       const collRef = collection(db, 'drugs'); 
-      
-      // เตรียมข้อมูลที่จะบันทึก เพิ่ม TimeStamp
       const dataToSave = {
           ...drugData,
           lastUpdated: serverTimestamp(),
-          updatedBy: "Admin" // หรือชื่อผู้ใช้งานถ้ามี
+          updatedBy: "Admin" 
       };
 
       if (drugData.id) { 
         const docRef = doc(db, 'drugs', drugData.id); 
-        const { id, ...dataToUpdate } = dataToSave; // เอา id ออกจากข้อมูลที่จะ update
+        const { id, ...dataToUpdate } = dataToSave; 
         await updateDoc(docRef, dataToUpdate); 
       } else { 
-        // กรณีเพิ่มใหม่ เอา id ที่อาจติดมาเป็น null ออก
         const { id, ...newData } = dataToSave;
         await addDoc(collRef, newData); 
       } 
