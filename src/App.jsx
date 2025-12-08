@@ -446,7 +446,7 @@ const DrugFormModal = ({ initialData, onClose, onSave }) => {
   );
 };
 
-// ✅ 3. แก้ไข DetailModal (อัปเดตใหม่)
+// ✅ 3. แก้ไข DetailModal (อัปเดต Layout Header ใหม่: เวลาอยู่ใต้ Icon)
 const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
   const displayImage = getDisplayImageUrl(drug.image);
   const displayLeaflet = getDisplayImageUrl(drug.leaflet);
@@ -468,41 +468,42 @@ const DetailModal = ({ drug, onClose, onEdit, onDelete, isAdmin }) => {
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
-        {/* --- ส่วน Header ที่แก้ไขแล้ว (เรียงแนวนอน ไม่ทับปุ่ม) --- */}
-        <div className="bg-slate-800 text-white p-4 flex justify-between items-center sticky top-0 z-10">
+        {/* --- ส่วน Header ปรับปรุงใหม่ --- */}
+        <div className="bg-slate-800 text-white p-4 flex justify-between items-start sticky top-0 z-10">
           
-          {/* ชื่อยา (ซ้ายมือ) */}
-          <div className="overflow-hidden mr-2">
-            <h2 className="text-xl font-bold truncate pr-2">{drug.genericName}</h2>
+          {/* ส่วนซ้าย: ชื่อยา และ ยี่ห้อ */}
+          <div className="flex flex-col overflow-hidden mr-2 pt-1">
+            <h2 className="text-xl font-bold truncate pr-2 leading-tight">{drug.genericName}</h2>
             <p className="text-slate-300 text-sm truncate">{drug.brandName}</p>
           </div>
           
-          {/* กลุ่มเครื่องมือด้านขวา (วันที่ + ปุ่ม) */}
-          <div className="flex items-center gap-3 shrink-0">
+          {/* ส่วนขวา: กลุ่มปุ่ม และ เวลา (เรียงแนวตั้ง) */}
+          <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
              
-             {/* วันที่แก้ไขล่าสุด (แสดงบรรทัดเดียว ไม่ทับปุ่ม, ลบ 'โดย admin' ออก) */}
-             {drug.lastUpdated && (
-                <span className="text-[10px] text-slate-400 whitespace-nowrap bg-slate-900/50 px-2 py-1 rounded border border-slate-700 hidden sm:inline-block">
-                  แก้ไข: {formatDate(drug.lastUpdated)}
-                </span>
-             )}
-
-            {/* ปุ่มต่างๆ */}
-            <div className="flex items-center gap-2">
+            {/* แถวบน: ปุ่มเครื่องมือ (Edit / Delete / Close) */}
+            <div className="flex items-center gap-3">
               {isAdmin && (
                 <>
-                  <button onClick={onEdit} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors text-yellow-400" title="แก้ไข">
+                  <button onClick={onEdit} className="text-slate-400 hover:text-yellow-400 transition-colors" title="แก้ไข">
                     <Edit size={18} />
                   </button>
-                  <button onClick={() => onDelete(drug.id)} className="p-2 bg-slate-700 hover:bg-red-600 rounded-full transition-colors text-red-400 hover:text-white" title="ลบ">
+                  <button onClick={() => onDelete(drug.id)} className="text-slate-400 hover:text-red-400 transition-colors" title="ลบ">
                     <Trash2 size={18} />
                   </button>
                 </>
               )}
-              <button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-full transition-colors">
+              {/* ปุ่มปิด (ทำให้เด่นขึ้นเล็กน้อย หรือแยกออกมาก็ได้ แต่รวมกลุ่มจะสวยกว่า) */}
+              <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors ml-1">
                 <X size={24} />
               </button>
             </div>
+
+            {/* แถวล่าง: เวลาแก้ไขล่าสุด (ตัวเล็ก อยู่ใต้ Icon) */}
+            {drug.lastUpdated && (
+                <span className="text-[10px] text-slate-400 font-light tracking-wide">
+                  แก้ไข: {formatDate(drug.lastUpdated)}
+                </span>
+            )}
           </div>
 
         </div>
