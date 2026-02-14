@@ -7,7 +7,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build Output
 dist
 dist-ssr
 *.local
@@ -18,9 +21,10 @@ dist-ssr
 .idea
 .DS_Store
 *.suo
-*.ntvs*
+*.ntvs
 *.njsproj
 *.sln
 *.sw?
-.env
 
+# Security (สำคัญที่สุด ห้ามลบ)
+.env
