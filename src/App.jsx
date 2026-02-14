@@ -11,7 +11,7 @@ import ExportButton from './ExportButton';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
-  apiKey: "AIzaSyD8vn9ipMGLVGPuLqKZg6_599Rhv1-Y-24",
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: "drug-database-yom-c18f5.firebaseapp.com",
   projectId: "drug-database-yom-c18f5",
   storageBucket: "drug-database-yom-c18f5.firebasestorage.app", 
